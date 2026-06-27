@@ -1,0 +1,8 @@
+45.155.205.233 - - [26/Jun/2026:03:14:22 +0000] "GET / HTTP/1.1" 200 4021 "-" "Mozilla/5.0 (compatible; CensysInspect/1.1)"
+193.32.162.45 - - [26/Jun/2026:04:02:11 +0000] "GET /wp-login.php HTTP/1.1" 200 5310 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+193.32.162.45 - - [26/Jun/2026:04:02:13 +0000] "POST /wp-login.php HTTP/1.1" 302 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+193.32.162.45 - - [26/Jun/2026:04:02:14 +0000] "POST /xmlrpc.php HTTP/1.1" 200 412 "-" "Mozilla/5.0"
+141.98.11.27 - - [26/Jun/2026:06:41:55 +0000] "GET /wp-content/plugins/ HTTP/1.1" 403 162 "-" "python-requests/2.31.0"
+80.66.83.110 - - [26/Jun/2026:09:18:30 +0000] "GET /.env HTTP/1.1" 404 197 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+80.66.83.110 - - [26/Jun/2026:09:18:31 +0000] "GET /wp-config.php.bak HTTP/1.1" 404 197 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+185.220.101.34 - - [26/Jun/2026:11:52:09 +0000] "GET / HTTP/1.1" 200 4021 "-" "curl/7.81.0"

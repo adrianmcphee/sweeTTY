@@ -1,0 +1,6 @@
+# /etc/fstab: static file system information.
+#
+# <file system>                           <mount point> <type> <options>        <dump> <pass>
+UUID={{.RootUUID}} /              ext4   errors=remount-ro 0      1
+{{if not .Embedded}}/dev/xvdb1         /var/lib/mysql ext4   defaults,noatime  0      2
+{{end}}/swap.img          none           swap   sw                0      0

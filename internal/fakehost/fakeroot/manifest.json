@@ -1,0 +1,74 @@
+{
+  "defaults": {
+    "uid": 0, "gid": 0, "uname": "root", "gname": "root",
+    "dirmode": "0755", "filemode": "0644", "mtime": "-41d"
+  },
+  "meta": {
+    "/etc/shadow": {"mode": "0640", "gname": "shadow", "gid": 42, "mtime": "-41d"},
+    "/etc/machine-id": {"mtime": "-41d"},
+    "/etc/crontab": {"mtime": "-30d"},
+    "/root": {"mode": "0700", "mtime": "-2d"},
+    "/root/.ssh": {"mode": "0700"},
+    "/root/.ssh/id_rsa": {"mode": "0600"},
+    "/root/.ssh/authorized_keys": {"mode": "0600"},
+    "/root/.ssh/known_hosts": {"mode": "0644", "mtime": "-5d"},
+    "/root/.bash_history": {"mode": "0600", "mtime": "-3h"},
+    "/var/www": {"uname": "www-data", "gname": "www-data", "uid": 33, "gid": 33},
+    "/var/www/html": {"uname": "www-data", "gname": "www-data", "uid": 33, "gid": 33},
+    "/var/www/html/wp-config.php": {"uname": "www-data", "gname": "www-data", "uid": 33, "gid": 33, "mode": "0640"},
+    "/var/www/html/index.php": {"uname": "www-data", "gname": "www-data", "uid": 33, "gid": 33},
+    "/home/deploy/.bashrc": {"uname": "deploy", "gname": "deploy", "uid": 1000, "gid": 1000},
+    "/home/deploy/.profile": {"uname": "deploy", "gname": "deploy", "uid": 1000, "gid": 1000},
+    "/home/deploy/scripts/backup.sh": {"uname": "deploy", "gname": "deploy", "uid": 1000, "gid": 1000, "mode": "0750", "mtime": "-9d"},
+    "/var/log/auth.log": {"gname": "adm", "gid": 4, "mtime": "-7m"},
+    "/var/log/nginx/access.log": {"uname": "www-data", "uid": 33, "gname": "adm", "gid": 4, "mtime": "-1m"}
+  },
+  "dirs": [
+    {"path": "/usr"}, {"path": "/usr/bin"}, {"path": "/usr/sbin"}, {"path": "/usr/lib"},
+    {"path": "/usr/local"}, {"path": "/usr/local/bin"}, {"path": "/usr/local/sbin"},
+    {"path": "/usr/share"}, {"path": "/usr/include"}, {"path": "/usr/games"},
+    {"path": "/var"}, {"path": "/var/cache"}, {"path": "/var/cache/apt"}, {"path": "/var/lib"},
+    {"path": "/var/lib/mysql", "uname": "mysql", "gname": "mysql", "uid": 111, "gid": 114, "mode": "0700"},
+    {"path": "/var/lib/dpkg"}, {"path": "/var/log"}, {"path": "/var/log/nginx"},
+    {"path": "/var/log/mysql", "uname": "mysql", "gname": "adm", "uid": 111, "gid": 4},
+    {"path": "/var/spool"}, {"path": "/var/spool/cron"}, {"path": "/var/tmp", "mode": "1777"},
+    {"path": "/var/run"}, {"path": "/var/backups"}, {"path": "/var/www"}, {"path": "/var/www/html"},
+    {"path": "/tmp", "mode": "1777"}, {"path": "/opt"}, {"path": "/srv"}, {"path": "/mnt"}, {"path": "/media"},
+    {"path": "/boot"}, {"path": "/dev"}, {"path": "/dev/pts"}, {"path": "/dev/shm", "mode": "1777"},
+    {"path": "/proc"}, {"path": "/sys"}, {"path": "/run"}, {"path": "/run/sshd", "mode": "0755"},
+    {"path": "/run/mysqld", "uname": "mysql", "gname": "mysql", "uid": 111, "gid": 114},
+    {"path": "/home"}, {"path": "/home/deploy", "uname": "deploy", "gname": "deploy", "uid": 1000, "gid": 1000},
+    {"path": "/home/deploy/scripts", "uname": "deploy", "gname": "deploy", "uid": 1000, "gid": 1000},
+    {"path": "/root", "mode": "0700"}, {"path": "/root/.ssh", "mode": "0700"}, {"path": "/root/.cache", "mode": "0700"},
+    {"path": "/etc/init.d"}, {"path": "/etc/systemd"}, {"path": "/etc/systemd/system"},
+    {"path": "/etc/ssh"}, {"path": "/etc/nginx"}, {"path": "/etc/nginx/sites-enabled"}, {"path": "/etc/nginx/sites-available"},
+    {"path": "/etc/mysql"}, {"path": "/etc/mysql/mysql.conf.d"},
+    {"path": "/etc/ssl"}, {"path": "/etc/ssl/certs"}, {"path": "/etc/ssl/private", "mode": "0710", "gname": "ssl-cert", "gid": 113},
+    {"path": "/etc/apt"}, {"path": "/etc/apt/sources.list.d"}, {"path": "/etc/cron.d"}, {"path": "/etc/cron.daily"},
+    {"path": "/etc/cron.hourly"}, {"path": "/etc/php"}, {"path": "/etc/php/8.1"}
+  ],
+  "links": [
+    {"path": "/bin", "target": "/usr/bin"},
+    {"path": "/sbin", "target": "/usr/sbin"},
+    {"path": "/lib", "target": "/usr/lib"},
+    {"path": "/usr/bin/sh", "target": "dash"},
+    {"path": "/usr/bin/python", "target": "python3"},
+    {"path": "/usr/bin/vi", "target": "/usr/bin/vim.basic"},
+    {"path": "/usr/bin/vim", "target": "/usr/bin/vim.basic"}
+  ],
+  "binaries": [
+    {"dir": "/usr/bin", "size": 35112, "names": [
+      "bash","dash","ls","cat","cp","mv","rm","mkdir","rmdir","touch","ln","chmod","chown","echo","pwd",
+      "grep","egrep","sed","awk","cut","sort","uniq","head","tail","wc","tr","find","xargs","tar","gzip",
+      "gunzip","bzip2","zip","unzip","wget","curl","scp","ssh","sftp","python3","perl","ruby","gcc","cc",
+      "make","git","vim.basic","nano","less","more","file","stat","ps","top","htop","kill","killall","id",
+      "whoami","who","w","last","uname","hostname","uptime","date","df","du","free","mount","umount","dmesg",
+      "lscpu","lsblk","lsof","netstat","ss","ip","ping","dig","nslookup","host","nc","base64","md5sum",
+      "sha256sum","openssl","crontab","sudo","su","env","printenv","which","tee","xxd","strings","nohup","screen","tmux"
+    ]},
+    {"dir": "/usr/sbin", "size": 47120, "names": [
+      "sshd","nginx","mysqld","useradd","userdel","usermod","groupadd","service","iptables","nft","ufw",
+      "cron","rsyslogd","visudo","ifconfig","route","sysctl"
+    ]}
+  ]
+}
