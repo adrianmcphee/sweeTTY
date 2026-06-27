@@ -72,6 +72,14 @@ network, executing attacker input, or writing to the host disk.
 - **Hostile input does not hang or crash a handler**: unterminated subnegotiation, self-referential `sh -c`, base64-decoded command, repeated pivot. _internal/proto/telnet: TestUnterminatedSubnegotiationDoesNotHang, TestSelfReferentialExecDoesNotCrash, TestBase64DecodedCommandDoesNotCrash, TestPivotIsSingleHop_
 - **Progress bars advance over a fixed duration**. _internal/server: TestProgressBar_
 
+## Telnet
+
+- **Connect emits an IAC option burst** (DO NAWS, WILL SGA, DO TTYPE, multiple triplets) and an agetty-style `<host> login:`. _internal/proto/telnet: TestIACNegotiationOnConnect_
+- **Option negotiation refuses offered options, declines client options, acks its own burst silently, and does not loop on a NAWS ack**. _internal/proto/telnet: TestTelnetRefusesOfferedOption, TestTelnetDeclinesClientOption, TestTelnetAcksItsOwnBurstSilently, TestTelnetDoesNotLoopOnNawsAck_
+- **Login validates like sshd**: correct per-instance password accepted; wrong password re-prompts with "Login incorrect"; empty username re-prompts; disconnect at the password prompt logs no credential. _internal/proto/telnet: TestCorrectPasswordIsAccepted, TestWrongPasswordRePromptsLoginIncorrect, TestEmptyUsernameRePrompts, TestPasswordDisconnectLogsNoCredential_
+- **Credentials are captured with verdict; inbound IAC is stripped from the username**. _internal/proto/telnet: TestCredentialCapture, TestInboundIACStrippedFromUsername_
+- **Ubuntu MOTD on login; `quit` is not a builtin**. _internal/proto/telnet: TestUbuntuWelcomeAndMOTD, TestQuitIsNotABuiltin_
+
 ## Source attribution and scan detection
 
 - **A bare connect that sends nothing is logged as a port scan and dropped**. _internal/server: TestBareConnectIsPortScan_
