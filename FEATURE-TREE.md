@@ -80,6 +80,14 @@ network, executing attacker input, or writing to the host disk.
 - **Credentials are captured with verdict; inbound IAC is stripped from the username**. _internal/proto/telnet: TestCredentialCapture, TestInboundIACStrippedFromUsername_
 - **Ubuntu MOTD on login; `quit` is not a builtin**. _internal/proto/telnet: TestUbuntuWelcomeAndMOTD, TestQuitIsNotABuiltin_
 
+## SSH
+
+- **Banner is exact on the wire, followed by silence before kex, and drawn from an OpenSSH-grammar pool**. _internal/proto/ssh: TestSSHBannerExactWire, TestSSHEmitsBannerThenSilenceBeforeKex, TestSSHBannerPoolMatchesOpenSSHGrammar_
+- **A completed handshake yields an interactive shell over the same VFS; kex and client are captured**. _internal/proto/ssh: TestInteractiveShellSession, TestSSHKexCaptured, TestSSHBannerFromPersonaAndClientCapture_
+- **The exec channel runs the shell, reports exit status, and captures download intent without fetching**. _internal/proto/ssh: TestInteractiveExecRunsTheShell, TestExecReportsExitStatus, TestSSHExecCapturesIntentWithoutFetching_
+- **Wrong password and unknown user are rejected**. _internal/proto/ssh: TestWrongPasswordRejected, TestUnknownUserRejected_
+- **Cooked-TTY line discipline edits and terminates lines, swallows CRLF, and ends on Ctrl-D**. _internal/proto/ssh: TestCookedTTYEditsAndTerminatesLines, TestCookedTTYSwallowsCRLF, TestCookedTTYCtrlDEndsSession_
+
 ## Source attribution and scan detection
 
 - **A bare connect that sends nothing is logged as a port scan and dropped**. _internal/server: TestBareConnectIsPortScan_
