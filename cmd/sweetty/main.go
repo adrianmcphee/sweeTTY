@@ -153,6 +153,22 @@ func fatal(ctx string, err error) {
 	os.Exit(1)
 }
 
+// intOr / floatOr return def when the configured value is unset (non-positive),
+// so a brute-force config that names only "enabled" still gets sane thresholds.
+func intOr(v, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return v
+}
+
+func floatOr(v, def float64) float64 {
+	if v <= 0 {
+		return def
+	}
+	return v
+}
+
 // portalExposedToNetwork reports whether the portal is bound to a non-loopback
 // address, exposing the dashboard and the console reverse proxy to anyone who can
 // reach the bind. The portal has no application auth, so the intended posture is a
@@ -239,6 +255,13 @@ func run(configPath string) {
 	p, err := persona.LoadOrCreate(personaPath)
 	if err != nil {
 		fatal("persona", err)
+	}
+	if cfg.BruteForce.Enabled {
+		tries := intOr(cfg.BruteForce.AfterTries, 8)
+		after := time.Duration(intOr(cfg.BruteForce.AfterSeconds, 120)) * time.Second
+		prob := floatOr(cfg.BruteForce.Probability, 0.25)
+		p.SetBruteForce(persona.BruteForceConfig{Enabled: true, AfterTries: tries, After: after, Probability: prob})
+		lg.System("bruteforce: a source may be let in with the credential it tried after %d attempts and %s (p=%.2f)", tries, after, prob)
 	}
 	base, err := fakehost.Load(p)
 	if err != nil {

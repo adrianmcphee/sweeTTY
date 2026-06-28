@@ -110,8 +110,8 @@ func (t *Protocol) Handle(s *server.Session) {
 		}
 		s.Write("\r\n")
 
-		accepted := t.p.Accept(user, pass)
-		s.LogCredentialResult(user, pass, accepted)
+		accepted, bruteForced := t.p.AcceptFrom(s.SrcIP, user, pass)
+		s.LogCredentialResult(user, pass, accepted, bruteForced)
 		if !server.FastMode() {
 			time.Sleep(util.RandomDelay(700, 1400)) // simulate a PAM auth check
 		}

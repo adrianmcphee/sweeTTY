@@ -96,6 +96,11 @@ type Persona struct {
 	// — the NAS shell history, the backup script — so the trail stays coherent.
 	// Nothing about the name hints at what viewing the files actually reveals.
 	LootPath string `json:"loot_path"`
+
+	// bf is the optional, in-memory "let a persistent guesser in" policy. It is not
+	// part of the persisted identity (no json tag); it is wired up at startup from
+	// the config via SetBruteForce and shared across the telnet and SSH services.
+	bf *bruteForce
 }
 
 // Save writes the persona to path with mode 0600, overwriting an existing file.
@@ -400,6 +405,44 @@ func (p *Persona) Accept(user, pass string) bool {
 	default:
 		return false
 	}
+}
+
+// knownUser reports whether name is one of the two accounts that exist on this
+// host, the way real PAM rejects an unknown user regardless of password.
+func (p *Persona) knownUser(name string) bool {
+	return name == "root" || name == p.Username
+}
+
+// SetBruteForce installs the optional "let a persistent guesser in" policy. With
+// it unset (the default), AcceptFrom behaves exactly like Accept. Call it once at
+// startup before any service uses the persona; it is not safe to change live.
+func (p *Persona) SetBruteForce(cfg BruteForceConfig) {
+	if !cfg.Enabled {
+		p.bf = nil
+		return
+	}
+	p.bf = &bruteForce{cfg: cfg, src: map[string]*srcAuth{}}
+}
+
+// AcceptFrom is Accept plus the optional brute-force policy. The real per-instance
+// credential always wins. Otherwise, when the policy is enabled and the attempt
+// targets a real account, a source that has tried hard enough may be let in with
+// the credential it just offered (and that credential is then remembered for it).
+// It returns whether the login is accepted and whether it was a brute-force accept
+// rather than the real password, so the caller can log the distinction. srcIP
+// scopes the policy per source so one persistent attacker cannot crack the box
+// open for everyone.
+func (p *Persona) AcceptFrom(srcIP, user, pass string) (accepted, bruteForced bool) {
+	if p.Accept(user, pass) {
+		return true, false
+	}
+	if p.bf == nil || !p.knownUser(user) {
+		return false, false
+	}
+	if p.bf.consider(srcIP, user, pass) {
+		return true, true
+	}
+	return false, false
 }
 
 func makeHostnameFromRole(role string) string {

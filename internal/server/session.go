@@ -314,13 +314,18 @@ func (s *Session) LogCredential(user, pass string) {
 // accepted, for services (SSH) that actually validate the pair rather than waving
 // every login through. The pair is captured either way; the verdict tells an
 // analyst which attempts believed they succeeded.
-func (s *Session) LogCredentialResult(user, pass string, accepted bool) {
+func (s *Session) LogCredentialResult(user, pass string, accepted, bruteForced bool) {
 	e := s.ev("CREDENTIAL")
 	e.Username = user
 	e.Password = pass
-	if accepted {
+	switch {
+	case bruteForced:
+		// Let in not by the real credential but by the brute-force policy: the source
+		// kept guessing and was eventually let in with the pair it tried.
+		e.Note = "accepted (brute-forced)"
+	case accepted:
 		e.Note = "accepted"
-	} else {
+	default:
 		e.Note = "rejected"
 	}
 	s.logger.Log(e)

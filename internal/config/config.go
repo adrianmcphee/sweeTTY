@@ -28,8 +28,22 @@ type Config struct {
 	AsnFile           string         `json:"asn_file,omitempty"`            // optional operator IP-to-ASN CSV (start,end,asn,org), read only by the portal, surfaces the ISP / hosting provider
 	RecordDir         string         `json:"record_dir,omitempty"`          // optional directory for per-session asciinema cast recordings; empty disables recording
 	PersonaFile       string         `json:"persona_file,omitempty"`        // where the generated per-instance identity is persisted; empty means persona.json beside the config. Point it at a honeypot-writable path when the config dir is read-only (the hardened deployment), since the persona is written by the honeypot, not the operator
+	BruteForce        BruteForce     `json:"bruteforce,omitzero"`           // optional "let a persistent guesser in" policy; off by default
 	AdminConsoles     []AdminConsole `json:"admin_consoles,omitempty"`      // operator consoles reverse-proxied through the portal, reached over the same SSH tunnel
 	Listeners         []Listener     `json:"listeners"`
+}
+
+// BruteForce tunes the optional "let a persistent guesser in" policy (off by
+// default). Once a source has made AfterTries attempts and AfterSeconds have
+// passed since its first one, each further attempt against a real account has
+// Probability of being accepted with the credential it offered, so a
+// credential-stuffing bot eventually believes it cracked the box and reveals its
+// next stage. Maps to persona.BruteForceConfig at startup.
+type BruteForce struct {
+	Enabled      bool    `json:"enabled,omitempty"`
+	AfterTries   int     `json:"after_tries,omitempty"`
+	AfterSeconds int     `json:"after_seconds,omitempty"`
+	Probability  float64 `json:"probability,omitempty"`
 }
 
 // PersonaPath resolves where the instance persona is persisted. By default it is

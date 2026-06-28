@@ -142,8 +142,8 @@ func (pr *Protocol) Handle(s *server.Session) {
 // authPassword logs the attempt with its verdict and accepts only a credential the
 // persona recognises.
 func (pr *Protocol) authPassword(s *server.Session, user, pass string) (*gossh.Permissions, error) {
-	ok := pr.p.Accept(user, pass)
-	s.LogCredentialResult(user, pass, ok)
+	ok, bruteForced := pr.p.AcceptFrom(s.SrcIP, user, pass)
+	s.LogCredentialResult(user, pass, ok, bruteForced)
 	if ok {
 		return &gossh.Permissions{}, nil
 	}
