@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"sweetty/internal/event"
 	"sweetty/internal/fakehost"
 	"sweetty/internal/persona"
+	"sweetty/internal/portal"
 	"sweetty/internal/proto/ftp"
 	httpproto "sweetty/internal/proto/http"
 	"sweetty/internal/proto/https"
@@ -90,6 +92,24 @@ func main() {
 func fatal(ctx string, err error) {
 	fmt.Fprintln(os.Stderr, ctx+":", err)
 	os.Exit(1)
+}
+
+// portalExposedToNetwork reports whether the portal is bound to a non-loopback
+// address, exposing the dashboard and the console reverse proxy to anyone who can
+// reach the bind. The portal has no application auth, so the intended posture is a
+// loopback bind reached over the SSH tunnel; a non-loopback bind is a
+// misconfiguration worth warning about loudly.
+func portalExposedToNetwork(cfg config.Config) bool {
+	switch cfg.PortalBind {
+	case "127.0.0.1", "::1", "localhost":
+		return false
+	case "":
+		return true // an empty bind listens on all interfaces
+	}
+	if ip := net.ParseIP(cfg.PortalBind); ip != nil && ip.IsLoopback() {
+		return false
+	}
+	return true
 }
 
 // hasProtocol reports whether any configured listener runs the named protocol.
@@ -189,6 +209,27 @@ func run(configPath string) {
 		fmt.Fprintln(os.Stderr, "no listeners started")
 		os.Exit(1)
 	}
+
+	if portalExposedToNetwork(cfg) {
+		// The intended posture is a loopback bind reached over the SSH tunnel. The
+		// portal has no application auth, so a non-loopback bind exposes the whole
+		// dashboard and the console reverse proxy to anyone who can reach the port;
+		// make the misconfiguration impossible to miss in both the log and on the
+		// console.
+		lg.System("WARNING: portal_bind=%q is not loopback; the dashboard and console proxy are exposed on the network with no authentication. Bind 127.0.0.1 and reach it over the SSH tunnel.", cfg.PortalBind)
+		fmt.Fprintf(os.Stderr, "WARNING: portal exposed on the network (portal_bind=%q)\n", cfg.PortalBind)
+	}
+
+	pt := portal.New(cfg, lg)
+	go func() {
+		if err := pt.Start(); err != nil {
+			// The portal is observability, not the core sensor, so a bind failure is
+			// logged loudly but does not take the listeners down.
+			lg.System("portal failed to start: %v", err)
+			fmt.Fprintf(os.Stderr, "portal: %v\n", err)
+		}
+	}()
+	fmt.Printf("portal listening :%d\n", cfg.PortalPort)
 
 	// Run until a termination signal, then shut down cleanly: stop accepting new
 	// connections and flush the log (via the deferred lg.Close), so SIGTERM from
