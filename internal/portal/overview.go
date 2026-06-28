@@ -3,6 +3,7 @@ package portal
 import (
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +20,8 @@ const overviewSourceCap = 300
 type overviewSource struct {
 	IP        string   `json:"ip"`
 	Country   string   `json:"country,omitempty"`
+	ASN       uint32   `json:"asn,omitempty"`
+	Org       string   `json:"org,omitempty"`
 	Scope     string   `json:"scope"`
 	Events    int      `json:"events"`
 	Sessions  int      `json:"sessions"`
@@ -42,6 +45,15 @@ type portStat struct {
 // not a globally routable one with a known country).
 type countryStat struct {
 	Country string `json:"country"`
+	Sources int    `json:"sources"`
+	Events  int    `json:"events"`
+}
+
+// ispStat rolls sources up by their autonomous-system operator (the ISP or
+// hosting provider), so an operator sees which networks are hammering the box.
+type ispStat struct {
+	ASN     uint32 `json:"asn,omitempty"`
+	Org     string `json:"org"`
 	Sources int    `json:"sources"`
 	Events  int    `json:"events"`
 }
@@ -109,7 +121,7 @@ func (p *Portal) overview(c *gin.Context) {
 		row := bySrc[src]
 		if row == nil {
 			loc := p.geo.Locate(src)
-			row = &overviewSource{IP: src, Country: loc.Country, Scope: loc.Scope, FirstSeen: e.Time}
+			row = &overviewSource{IP: src, Country: loc.Country, ASN: loc.ASN, Org: loc.Org, Scope: loc.Scope, FirstSeen: e.Time}
 			bySrc[src] = row
 			order = append(order, src)
 			sessSeen[src] = map[string]bool{}
@@ -179,9 +191,11 @@ func (p *Portal) overview(c *gin.Context) {
 		},
 		"by_port":     sortedPorts(portStats),
 		"by_country":  countryRollup(order, bySrc),
+		"by_isp":      ispRollup(order, bySrc),
 		"user_agents": topAgents(uaStats),
 		"sources":     topSources(order, bySrc),
 		"geo_active":  p.geo.Loaded() > 0,
+		"asn_active":  p.geo.AsnLoaded() > 0,
 	})
 }
 
@@ -256,6 +270,47 @@ func countryRollup(order []string, bySrc map[string]*overviewSource) []countrySt
 	return out
 }
 
+// ispRollup aggregates sources by their AS operator (ISP / hosting provider),
+// falling back to "AS<number>" when the operator name is unknown and to the scope
+// label when there is no ASN at all, so every source is accounted for. Most
+// sources first.
+func ispRollup(order []string, bySrc map[string]*overviewSource) []ispStat {
+	agg := map[string]*ispStat{}
+	keys := []string{}
+	for _, src := range order {
+		row := bySrc[src]
+		key := row.Org
+		if key == "" && row.ASN != 0 {
+			key = "AS" + strconv.FormatUint(uint64(row.ASN), 10)
+		}
+		if key == "" {
+			key = row.Scope
+		}
+		if key == "" {
+			key = "unknown"
+		}
+		is := agg[key]
+		if is == nil {
+			is = &ispStat{ASN: row.ASN, Org: key}
+			agg[key] = is
+			keys = append(keys, key)
+		}
+		is.Sources++
+		is.Events += row.Events
+	}
+	out := make([]ispStat, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *agg[k])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Sources != out[j].Sources {
+			return out[i].Sources > out[j].Sources
+		}
+		return out[i].Events > out[j].Events
+	})
+	return out
+}
+
 // topAgents returns the most-seen client user-agent strings, capped to a sane
 // number so one noisy fuzzer cannot bloat the response.
 func topAgents(m map[string]*agentStat) []agentStat {
@@ -286,8 +341,10 @@ func emptyOverview(p *Portal) gin.H {
 		},
 		"by_port":     []portStat{},
 		"by_country":  []countryStat{},
+		"by_isp":      []ispStat{},
 		"user_agents": []agentStat{},
 		"sources":     []overviewSource{},
 		"geo_active":  p.geo.Loaded() > 0,
+		"asn_active":  p.geo.AsnLoaded() > 0,
 	}
 }

@@ -1,8 +1,8 @@
 // Package geo resolves an IP address to a coarse location for the management
 // portal's analytics. It runs only in the portal plane, never in the honeypot
 // listeners, and it makes no network calls: special-use ranges are classified
-// from the address itself, and country resolution is a pure lookup against an
-// operator-supplied database loaded once at startup. This keeps the honeypot's
+// from the address itself, and country and ASN/ISP resolution are pure lookups
+// against operator-supplied databases loaded once at startup. This keeps the honeypot's
 // egress-deny posture intact while still letting an operator see where a planted
 // bait was triggered from.
 package geo
@@ -21,13 +21,16 @@ import (
 
 // Location is what the resolver knows about an address. Country is an ISO-3166
 // alpha-2 code when a country database is loaded and the address falls in a
-// known range; it is empty for special-use or unresolved addresses. Scope names
-// the address class, so a private or loopback hit reads honestly instead of
-// being silently dropped.
+// known range; ASN/Org name the autonomous system and its operator (the ISP or
+// hosting provider) when an ASN database is loaded. All are empty for special-use
+// or unresolved addresses. Scope names the address class, so a private or
+// loopback hit reads honestly instead of being silently dropped.
 type Location struct {
 	Scope   string `json:"scope"`             // global, private, loopback, cgnat, linklocal, multicast, reserved, doc, unspecified, invalid
 	Country string `json:"country,omitempty"` // ISO alpha-2, empty when unknown
-	Source  string `json:"source,omitempty"`  // "db" when from the country database, else ""
+	ASN     uint32 `json:"asn,omitempty"`     // autonomous system number, when an ASN database is loaded
+	Org     string `json:"org,omitempty"`     // AS operator (ISP / hosting provider), when known
+	Source  string `json:"source,omitempty"`  // "db" when any field came from a database, else ""
 }
 
 // specialRanges are the IPv4 and IPv6 blocks the builtin classifier recognizes
@@ -57,11 +60,22 @@ type countryRange struct {
 	country    string
 }
 
-// Resolver classifies addresses and, when a country database is loaded, maps
-// global IPv4 addresses to a country. The zero value is usable and resolves
-// only scope; call LoadCSV to add country resolution.
+// asnRange is one inclusive IPv4 span mapped to an autonomous system number and
+// its operator (the ISP or hosting provider), stored as host integers for the
+// same binary-search lookup as countryRange.
+type asnRange struct {
+	start, end uint32
+	asn        uint32
+	org        string
+}
+
+// Resolver classifies addresses and, when the matching database is loaded, maps
+// global IPv4 addresses to a country and to an autonomous system. The zero value
+// is usable and resolves only scope; call LoadCSV and LoadASN to add country and
+// ISP resolution.
 type Resolver struct {
-	ranges []countryRange // sorted by start, non-overlapping after load
+	ranges    []countryRange // country ranges, sorted by start, non-overlapping after load
+	asnRanges []asnRange     // ASN ranges, sorted by start, non-overlapping after load
 }
 
 // NewResolver returns a resolver that classifies scope but knows no countries
@@ -93,13 +107,36 @@ func (r *Resolver) Locate(ip string) Location {
 			return Location{Scope: s.scope}
 		}
 	}
-	// Globally routable: resolve a country if the database knows this address.
+	// Globally routable: resolve a country and an autonomous system if the
+	// respective databases know this address.
 	loc := Location{Scope: "global"}
 	if country, ok := r.country(addr); ok {
 		loc.Country = country
 		loc.Source = "db"
 	}
+	if asn, org, ok := r.asnOf(addr); ok {
+		loc.ASN = asn
+		loc.Org = org
+		loc.Source = "db"
+	}
 	return loc
+}
+
+// asnOf binary-searches the loaded ASN ranges for a global IPv4 address, the same
+// way country does. IPv6 is not supported by the builtin database format.
+func (r *Resolver) asnOf(addr netip.Addr) (uint32, string, bool) {
+	if len(r.asnRanges) == 0 || !addr.Is4() {
+		return 0, "", false
+	}
+	v := beUint32(addr.As4())
+	i := sort.Search(len(r.asnRanges), func(i int) bool { return r.asnRanges[i].start > v }) - 1
+	if i < 0 {
+		return 0, "", false
+	}
+	if v <= r.asnRanges[i].end {
+		return r.asnRanges[i].asn, r.asnRanges[i].org, true
+	}
+	return 0, "", false
 }
 
 // country binary-searches the loaded ranges for a global IPv4 address. IPv6
@@ -124,6 +161,10 @@ func (r *Resolver) country(addr netip.Addr) (string, bool) {
 // Loaded reports how many country ranges are loaded, for an operator-facing
 // "database active" signal.
 func (r *Resolver) Loaded() int { return len(r.ranges) }
+
+// AsnLoaded reports how many ASN ranges are loaded, the ISP-database counterpart
+// of Loaded.
+func (r *Resolver) AsnLoaded() int { return len(r.asnRanges) }
 
 // LoadCSV loads an operator-supplied IPv4 country database and returns the
 // number of usable ranges. It accepts the common free formats: a three-column
@@ -194,6 +235,67 @@ func parseRecord(rec []string) (countryRange, bool) {
 		return countryRange{start: lo, end: hi, country: cc}, true
 	}
 	return countryRange{}, false
+}
+
+// LoadASN loads an operator-supplied IPv4 ASN database and returns the number of
+// usable ranges. It accepts the common free format of a "start,end,asn,org" row
+// (start and end as dotted IPv4 or host integers), tolerating blank lines, "#"
+// comments, and unparseable rows. Calling it replaces any previously loaded ASN
+// database.
+func (r *Resolver) LoadASN(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	rd := csv.NewReader(bufio.NewReader(f))
+	rd.FieldsPerRecord = -1 // org may itself contain commas
+	rd.ReuseRecord = true
+	rd.TrimLeadingSpace = true
+
+	var ranges []asnRange
+	for {
+		rec, err := rd.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			continue
+		}
+		if ar, ok := parseASNRecord(rec); ok {
+			ranges = append(ranges, ar)
+		}
+	}
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].start < ranges[j].start })
+	r.asnRanges = ranges
+	return len(ranges), nil
+}
+
+// parseASNRecord turns one CSV row into an ASN range. It reads "start,end,asn,org"
+// (or more fields, where everything after the asn is the org joined back, since a
+// provider name can contain commas). Rows without a numeric asn are skipped.
+func parseASNRecord(rec []string) (asnRange, bool) {
+	if len(rec) >= 1 && strings.HasPrefix(strings.TrimSpace(rec[0]), "#") {
+		return asnRange{}, false
+	}
+	if len(rec) < 3 {
+		return asnRange{}, false
+	}
+	lo, ok1 := parseBound(rec[0])
+	hi, ok2 := parseBound(rec[1])
+	if !ok1 || !ok2 || hi < lo {
+		return asnRange{}, false
+	}
+	asn, err := strconv.ParseUint(strings.TrimSpace(rec[2]), 10, 32)
+	if err != nil {
+		return asnRange{}, false
+	}
+	org := ""
+	if len(rec) >= 4 {
+		org = strings.TrimSpace(strings.Join(rec[3:], ","))
+	}
+	return asnRange{start: lo, end: hi, asn: uint32(asn), org: org}, true
 }
 
 // parseBound reads a range bound as either a dotted IPv4 address or a host

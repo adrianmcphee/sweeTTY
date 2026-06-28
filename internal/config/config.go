@@ -25,6 +25,7 @@ type Config struct {
 	ProxyTrustedCIDRs []string       `json:"proxy_trusted_cidrs,omitempty"` // peer networks (besides loopback) allowed to present a PROXY header; a header from any other peer is ignored so a direct attacker cannot spoof the source
 	PortalBind        string         `json:"portal_bind,omitempty"`         // host the portal binds; default 127.0.0.1, reached via an SSH tunnel. Set 0.0.0.0 to expose it directly (no application auth, so only behind a trusted boundary)
 	GeoIPFile         string         `json:"geoip_file,omitempty"`          // optional operator IP-to-country CSV, read only by the portal
+	AsnFile           string         `json:"asn_file,omitempty"`            // optional operator IP-to-ASN CSV (start,end,asn,org), read only by the portal, surfaces the ISP / hosting provider
 	RecordDir         string         `json:"record_dir,omitempty"`          // optional directory for per-session asciinema cast recordings; empty disables recording
 	PersonaFile       string         `json:"persona_file,omitempty"`        // where the generated per-instance identity is persisted; empty means persona.json beside the config. Point it at a honeypot-writable path when the config dir is read-only (the hardened deployment), since the persona is written by the honeypot, not the operator
 	AdminConsoles     []AdminConsole `json:"admin_consoles,omitempty"`      // operator consoles reverse-proxied through the portal, reached over the same SSH tunnel

@@ -45,6 +45,13 @@ func New(cfg config.Config, logger *event.Logger) *Portal {
 			logger.System("portal: country database loaded (%d ranges)", n)
 		}
 	}
+	if cfg.AsnFile != "" {
+		if n, err := resolver.LoadASN(cfg.AsnFile); err != nil {
+			logger.System("portal: ASN database %q could not be loaded: %v", cfg.AsnFile, err)
+		} else {
+			logger.System("portal: ASN database loaded (%d ranges)", n)
+		}
+	}
 	return &Portal{
 		cfg:      cfg,
 		logger:   logger,

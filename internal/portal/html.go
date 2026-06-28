@@ -70,7 +70,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .view.active{display:flex}
 
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:18px;flex:none}
-.recon{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;min-height:0}
+.recon{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;flex:1;min-height:0}
 .card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r)}
 .statcard{padding:16px}
 .statcard .top{display:flex;align-items:center;gap:11px}
@@ -114,6 +114,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .htrow .hc{flex:none;width:42px;text-align:center;color:#2dd4bf;font-weight:700;font-family:var(--mono);font-size:13px}
 .htrow .hip{flex:none;width:150px;color:var(--mut);font-family:var(--mono);font-size:12px}
 .geotag{flex:none;width:78px}
+.row .isp{flex:none;width:168px;color:var(--mut2);font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:999px;background:var(--elev);color:var(--mut);letter-spacing:.02em}
 .htrow .htk{flex:1;color:#d4d4d8;font-family:var(--mono);font-size:12px;word-break:break-word}
 
@@ -241,6 +242,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div class="recon">
 <div class="panel"><div class="panelhead"><span data-icon="scan"></span>Ports &amp; scans<span class="sp" style="flex:1"></span><span class="count" id="rp_count">0</span></div><div class="scroll" id="rec_ports"></div></div>
 <div class="panel"><div class="panelhead"><span data-icon="ips"></span>Countries<span class="sp" style="flex:1"></span><span class="count" id="rc_count">0</span></div><div class="scroll" id="rec_countries"></div></div>
+<div class="panel"><div class="panelhead"><span data-icon="ips"></span>Top ISPs<span class="sp" style="flex:1"></span><span class="count" id="ri_count">0</span></div><div class="scroll" id="rec_isps"></div></div>
 <div class="panel"><div class="panelhead"><span data-icon="console"></span>User agents<span class="sp" style="flex:1"></span><span class="count" id="ra_count">0</span></div><div class="scroll" id="rec_agents"></div></div>
 </div>
 </section>
@@ -411,6 +413,7 @@ function srcRow(r){
 var div=el('div','row');
 div.appendChild(el('span','ip',r.ip));
 var g=el('span','geotag');g.appendChild(el('span','tag',r.country||r.scope||'?'));div.appendChild(g);
+var isp=el('span','isp');if(r.org){isp.textContent=r.org;if(r.asn)isp.title='AS'+r.asn+' · '+r.org;}else if(r.asn){isp.textContent='AS'+r.asn;}div.appendChild(isp);
 var c=el('span','badge');c.style.width='64px';
 var cd=el('span','bd');cd.style.background=r.scanned?'#f87171':var_acc;c.appendChild(cd);
 c.appendChild(el('span','bn',(r.events||0)+' ev'));
@@ -433,6 +436,9 @@ for(var i=0;i<ports.length;i++)pb.appendChild(portRow(ports[i]));
 var cb=document.getElementById('rec_countries');cb.textContent='';setNum('rc_count',ctys.length);
 if(!ctys.length)cb.appendChild(el('div','empty','No sources yet.'));
 for(var j=0;j<ctys.length;j++)cb.appendChild(countryRow(ctys[j]));
+var isps=o.by_isp||[];var ib=document.getElementById('rec_isps');ib.textContent='';setNum('ri_count',isps.length);
+if(!isps.length)ib.appendChild(el('div','empty','No ISP data yet (load an ASN database).'));
+for(var m=0;m<isps.length;m++)ib.appendChild(ispRow(isps[m]));
 var ab=document.getElementById('rec_agents');ab.textContent='';setNum('ra_count',(o.totals&&o.totals.user_agents)||uas.length);
 if(!uas.length)ab.appendChild(el('div','empty','No client agents seen yet.'));
 for(var k=0;k<uas.length;k++)ab.appendChild(agentRow(uas[k]));
@@ -450,6 +456,13 @@ var div=el('div','row');
 var g=el('span','geotag');g.style.width='84px';g.appendChild(el('span','tag',cc.country));div.appendChild(g);
 var b=el('span','badge');b.style.width='92px';var bd=el('span','bd');bd.style.background=var_acc;b.appendChild(bd);b.appendChild(el('span','bn',cc.sources+(cc.sources===1?' src':' srcs')));div.appendChild(b);
 div.appendChild(el('span','msg',cc.events+' events'));
+return div;
+}
+function ispRow(s){
+var div=el('div','row');
+var name=el('span','msg');name.textContent=s.org||('AS'+s.asn);if(s.asn)name.title='AS'+s.asn;div.appendChild(name);
+var b=el('span','badge');b.style.width='92px';var bd=el('span','bd');bd.style.background=var_acc;b.appendChild(bd);b.appendChild(el('span','bn',s.sources+(s.sources===1?' src':' srcs')));div.appendChild(b);
+var ev=el('span','t');ev.style.width='84px';ev.textContent=s.events+' ev';div.appendChild(ev);
 return div;
 }
 function agentRow(a){

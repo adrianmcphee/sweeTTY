@@ -98,6 +98,8 @@ A few optional fields control the management plane and the network edge:
 - `proxy_protocol` (default `false`): parse an HAProxy PROXY header at the front of each connection and log the attacker's real source IP. Enable it only when the honeypot ports sit behind an HAProxy edge configured with `send-proxy`; the two are a matched pair (see the instance template).
 - `record_dir` (default empty, disabled): a directory to write per-session [asciinema](https://asciinema.org) cast recordings to, one `<session-id>.cast` per connection, capturing exactly the bytes the attacker saw. The portal can replay them inline.
 - `persona_file` (default empty: `persona.json` beside the config): where the generated per-instance identity is persisted. The honeypot writes it on first run (atomically), so when the config directory is operator-owned and read-only (the hardened deployment), point this at a directory the honeypot user owns and can write.
+- `geoip_file` (default empty, disabled): an operator-supplied IPv4-to-country CSV (`start,end,CC` or `cidr,CC`), read only by the portal, so the dashboard tags each source with a country. The honeypot host has no egress, so this is a static offline database; the operator refreshes it out of band.
+- `asn_file` (default empty, disabled): an operator-supplied IPv4-to-ASN CSV (`start,end,asn,org`), read only by the portal, so the dashboard shows each source's ISP / hosting provider and a "top ISPs" rollup. Offline like `geoip_file`.
 
 ### What each service presents
 

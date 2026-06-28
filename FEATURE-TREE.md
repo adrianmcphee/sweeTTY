@@ -125,6 +125,7 @@ network, executing attacker input, or writing to the host disk.
 ## Geo enrichment
 
 - **Country lookup reads an optional database** (range, integer, and CIDR row forms), claims no country without one, skips malformed rows, survives a recoverable CSV error without truncation, and classifies address scope. _internal/geo: TestCountryLookupRangeForm, TestCountryLookupIntegerAndCIDRForms, TestNoCountryWithoutDatabase, TestMalformedRowsAreSkipped, TestRecoverableCsvErrorDoesNotTruncate, TestScopeClassification_
+- **ASN/ISP lookup reads an optional `start,end,asn,org` database** (dotted or integer bounds, org may contain commas), tags a global address with its autonomous system and operator, claims none without a database or for special-use scope, and the portal rolls sources up by ISP. _internal/geo: TestLoadASNAndLocate, TestASNNotResolvedWithoutDBOrForSpecialUse; internal/portal: TestOverviewEnrichesISP_
 
 ## Session recording and replay
 
