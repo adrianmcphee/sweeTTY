@@ -1,0 +1,39 @@
+name: CI
+
+# The release workflow is manual (workflow_dispatch only), so without this every
+# push and pull request would go unverified and main could sit broken for a whole
+# dev cycle. This is the gate that runs the suite (with the race detector) on every
+# change.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: make fmt-check
+      - name: vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      # -race guards the event.Logger mutex and the portal feed broadcaster; -count=1
+      # stops a cached pass from hiding a newly-flaky test; -timeout caps a hung
+      # tarpit goroutine instead of letting it wedge the runner.
+      - name: test
+        run: go test -race -count=1 -timeout=300s ./...
