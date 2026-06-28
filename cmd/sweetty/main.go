@@ -17,6 +17,10 @@ import (
 	"sweetty/internal/event"
 	"sweetty/internal/fakehost"
 	"sweetty/internal/persona"
+	"sweetty/internal/proto/ftp"
+	httpproto "sweetty/internal/proto/http"
+	"sweetty/internal/proto/https"
+	"sweetty/internal/proto/ssh"
 	"sweetty/internal/proto/telnet"
 	"sweetty/internal/server"
 	"sweetty/internal/vfs"
@@ -110,6 +114,24 @@ func buildProtocol(lc config.Listener, p *persona.Persona, base *vfs.FS) server.
 			style = "ubuntu"
 		}
 		return telnet.New(base, p, style)
+	case "ssh":
+		// Persona "tarpit" selects the banner-and-tarpit SSH (zero crypto fingerprint,
+		// no session); anything else is the interactive shell over SSH, which is the
+		// default. The style otherwise feeds the shell prompt flavour.
+		if lc.Persona == "tarpit" {
+			return ssh.NewTarpit(p)
+		}
+		return ssh.New(base, p, lc.Persona)
+	case "http":
+		style := lc.Persona
+		if style == "" {
+			style = "nginx-static"
+		}
+		return httpproto.New(p, style)
+	case "https":
+		return https.New(p)
+	case "ftp":
+		return ftp.New(p)
 	}
 	return nil
 }
