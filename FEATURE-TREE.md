@@ -142,3 +142,13 @@ network, executing attacker input, or writing to the host disk.
 
 - **Config is generated from the persona with a per-instance portal port**. _internal/config: TestGenerateFromPersona, TestPortalPortVaries_
 - **Writing the default config refuses to overwrite an existing file**. _internal/config: TestWriteDefaultConfigRefusesOverwrite_
+
+## Build wiring
+
+- **The builder turns the config service set into live listeners for every configured protocol**. _cmd/sweetty: TestBuildProtocolWiresEveryConfiguredProtocol_
+
+## Out of scope and limitations
+
+- **No malware detonation or analysis**: payloads and intent are captured, not executed or emulated (VISION non-goal); the safety boundary is the proof.
+- **No blocking or filtering**: the sensor observes, it does not act on traffic (VISION non-goal).
+- **Bare `curl url | sh` and `python -c` downloads do not land a file**: these vectors log intent and fail; only wget and curl -O/-o land a payload. Deliberate scope.
