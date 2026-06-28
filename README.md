@@ -50,11 +50,11 @@ Then watch the log:
 tail -f sweetty.log | jq '{t: .time[11:19], e: .event, ip: .ip, d: (.command // .username // .request // "")}'
 ```
 
-…or open the portal. It binds loopback and serves plain HTTP with no login, so locally you just open `http://localhost:<portal_port>`. On a remote host it is never exposed; reach it by forwarding the management SSH port to it:
+…or open the portal. It binds loopback on a fixed port (`8888`) and serves plain HTTP with no login, so locally you just open `http://localhost:8888`. On a remote host it is never exposed; reach it by forwarding that loopback port over the management SSH:
 
 ```bash
-ssh -L 8443:127.0.0.1:<portal_port> you@host -p <ssh_port>
-# then open http://localhost:8443
+ssh -L 8888:127.0.0.1:8888 you@host -p <ssh_port>
+# then open http://localhost:8888
 ```
 
 ---
@@ -63,7 +63,7 @@ ssh -L 8443:127.0.0.1:<portal_port> you@host -p <ssh_port>
 
 ```
 sweetty                 Load config, start all listeners and the portal
-sweetty init            Write a per-instance config.json (randomized portal port and service profile; fails if one exists)
+sweetty init            Write a per-instance config.json (randomized service profile; portal on a fixed loopback port; fails if one exists)
 sweetty version         Print the version, commit, and build date
 ```
 
@@ -73,13 +73,13 @@ A `-config <path>` flag selects an alternate config file (default `config.json`)
 
 ## Configuration
 
-`sweetty init` generates a `config.json` for this instance. Two things in it are randomized per instance, so that no two sweetties look alike and nothing here is predictable from the public source: the **management portal's port** (a random high port, not a fixed well-known one) and the **service profile** (which fake services run, and which persona and software version each one presents). The honeypot services themselves still answer on the standard ports attackers expect (a fake telnet on 23, a fake web server on 80, and so on), because that is what a real host of that kind does. What varies is which of them are present and how each one looks.
+`sweetty init` generates a `config.json` for this instance. The **service profile** is randomized per instance, so that no two sweetties look alike and nothing here is predictable from the public source: which fake services run, and which persona and software version each one presents. The honeypot services themselves still answer on the standard ports attackers expect (a fake telnet on 23, a fake web server on 80, and so on), because that is what a real host of that kind does. What varies is which of them are present and how each one looks. The **management portal** is not part of that deception surface: it binds loopback on a fixed port (`8888`) and is reached only over the SSH tunnel, so it has no reason to move around and is not randomized.
 
 An example of a generated config (yours will differ):
 
 ```json
 {
-  "portal_port": 47318,
+  "portal_port": 8888,
   "portal_bind": "127.0.0.1",
   "log_file": "sweetty.log",
   "listeners": [
@@ -150,7 +150,7 @@ Both halves are operator-replaceable. The reveal art is the payoff: drop any num
 
 ## Management portal
 
-The portal binds **loopback** on `portal_port`, serves plain HTTP, and is never exposed to the network. It carries no application auth of its own: you reach it by forwarding the box's real management SSH to it, so SSH key authentication is the single front door. The management SSH does not advertise as the admin door either: the instance template puts it on a randomized, http-like port (8088 and friends) that blends in among web services and differs per instance, so a scan finds the honeypot's ports and what looks like one more web service, never an obvious way in.
+The portal binds **loopback** on a fixed port (`portal_port`, default `8888`), serves plain HTTP, and is never exposed to the network. It carries no application auth of its own: you reach it by forwarding the box's real management SSH to it, so SSH key authentication is the single front door. The management SSH does not advertise as the admin door either: the instance template puts it on a randomized, http-like port (8088 and friends) that blends in among web services and differs per instance, so a scan finds the honeypot's ports and what looks like one more web service, never an obvious way in.
 
 Through the tunnel you get:
 
@@ -234,8 +234,7 @@ Lock down the host so management ports are reachable only from you, and the hone
 ```bash
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow from YOUR_IP to any port 9999   # your real SSH, on a non-standard port
-ufw allow from YOUR_IP to any port 8443   # portal
+ufw allow from YOUR_IP to any port 9999   # your real SSH (the portal is reached by tunnelling through it, so it needs no rule of its own)
 ufw allow 21,22,23,80,443,2323,8080/tcp   # honeypot surface
 ufw enable
 ```

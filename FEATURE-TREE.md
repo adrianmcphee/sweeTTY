@@ -140,7 +140,7 @@ network, executing attacker input, or writing to the host disk.
 
 ## Configuration and secrets
 
-- **Config is generated from the persona with a per-instance portal port**. _internal/config: TestGenerateFromPersona, TestPortalPortVaries_
+- **Config is generated from the persona; the portal binds a fixed loopback port (`8888`)**. _internal/config: TestGenerateFromPersona, TestPortalPortIsFixedLoopback_
 - **Writing the default config refuses to overwrite an existing file**. _internal/config: TestWriteDefaultConfigRefusesOverwrite_
 
 ## Build wiring

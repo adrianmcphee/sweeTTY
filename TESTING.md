@@ -54,7 +54,7 @@ The box survives a hostile connection. These are guarantees the tests enforce:
 
 - HTTP response framing (header order, chunked versus Content-Length, the `Connection` handling) is shared across stacks rather than emitted per stack, so a scanner that correlates nginx, Apache, and Tomcat framing sees one emitter behind all three. A per-stack response emitter closes this; the additive header, body, and status pins approximate it meanwhile.
 - The appliance personas claim non-x86_64 hardware over an x86_64 Ubuntu base. Scope the architecture per profile, or keep the appliance personas out of production.
-- `portal_port` falls back to a fixed `8443` when a config omits it; `init` always randomizes it, so only a hand-edited config is predictable.
+- `portal_port` is a fixed `8888` by design: `init` writes that known loopback value (and a config that omits it falls back to it). The portal is reached only over the SSH tunnel and binds loopback, so it is intentionally predictable rather than randomized; the internet-facing admin SSH port is the piece that varies.
 
 ## What we do not test, and why
 

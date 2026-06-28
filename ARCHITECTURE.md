@@ -44,7 +44,7 @@ The portal has no network footprint. It binds loopback and serves the dashboard 
 
 ```mermaid
 flowchart LR
-    OP([Operator]) -->|"ssh -L 8443:127.0.0.1:PORT<br/>key auth"| SSHD["Real sshd<br/>randomized http-like port"]
+    OP([Operator]) -->|"ssh -L 8888:127.0.0.1:8888<br/>key auth"| SSHD["Real sshd<br/>randomized http-like port"]
     SSHD --> PORTAL["Portal<br/>127.0.0.1:PORT"]
     PORTAL --> FEED["Live feed, Sources,<br/>Honeytokens, replay"]
     PORTAL -. "admin_consoles" .-> CON["Local console proxy<br/>e.g. HAProxy stats"]

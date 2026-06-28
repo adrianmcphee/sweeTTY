@@ -17,8 +17,8 @@ func TestGenerateFromPersona(t *testing.T) {
 			t.Errorf("listener %d mismatch: %+v vs %+v", i, cfg.Listeners[i], s)
 		}
 	}
-	if cfg.PortalPort < 20000 || cfg.PortalPort >= 60000 {
-		t.Errorf("portal port %d out of expected high range", cfg.PortalPort)
+	if cfg.PortalPort != defaultPortalPort {
+		t.Errorf("portal port %d, want fixed %d", cfg.PortalPort, defaultPortalPort)
 	}
 	for _, lc := range cfg.Listeners {
 		if lc.Port == cfg.PortalPort {
@@ -27,13 +27,12 @@ func TestGenerateFromPersona(t *testing.T) {
 	}
 }
 
-func TestPortalPortVaries(t *testing.T) {
-	p := persona.Generate()
-	seen := map[int]bool{}
+func TestPortalPortIsFixedLoopback(t *testing.T) {
+	// The portal binds loopback and is reached only over the SSH tunnel, so its
+	// port is a fixed known value, not randomized: stable across instances.
 	for range 25 {
-		seen[Generate(p).PortalPort] = true
-	}
-	if len(seen) < 5 {
-		t.Fatalf("portal port not varied: %d distinct in 25", len(seen))
+		if got := Generate(persona.Generate()).PortalPort; got != defaultPortalPort {
+			t.Fatalf("portal port %d, want fixed %d", got, defaultPortalPort)
+		}
 	}
 }

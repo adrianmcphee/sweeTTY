@@ -4,11 +4,18 @@ package config
 
 import (
 	"encoding/json"
-	mrand "math/rand/v2"
 	"os"
 
 	"sweetty/internal/persona"
 )
+
+// defaultPortalPort is the fixed loopback port the management dashboard binds.
+// It is deliberately NOT randomized: the portal binds loopback and the firewall
+// never opens it, so it is reachable only over the SSH tunnel. A varying port
+// would hide it from no attacker (none can reach 127.0.0.1) while making the
+// operator hunt for it every time. The internet-facing admin SSH port is the
+// piece that is randomized, to blend in among web services.
+const defaultPortalPort = 8888
 
 type Config struct {
 	PortalPort        int            `json:"portal_port"`
@@ -42,7 +49,7 @@ type Listener struct {
 
 func DefaultConfig() Config {
 	return Config{
-		PortalPort: 8443,
+		PortalPort: defaultPortalPort,
 		PortalBind: "127.0.0.1",
 		LogFile:    "sweetty.log",
 		Listeners: []Listener{
@@ -57,26 +64,21 @@ func DefaultConfig() Config {
 	}
 }
 
-// Generate builds a config for an instance from its persona: a randomized portal
-// port and the persona's chosen service set as listeners. This is what `init`
-// writes, so the exposed services and the portal port vary per instance.
+// Generate builds a config for an instance from its persona: the fixed loopback
+// portal port and the persona's chosen service set as listeners. This is what
+// `init` writes, so the exposed services vary per instance while the portal
+// stays on a known loopback port (see defaultPortalPort).
 func Generate(p *persona.Persona) Config {
 	listeners := make([]Listener, 0, len(p.Services))
 	for _, s := range p.Services {
 		listeners = append(listeners, Listener{Port: s.Port, Protocol: s.Protocol, Persona: s.Style})
 	}
 	return Config{
-		PortalPort: randomPortalPort(),
+		PortalPort: defaultPortalPort,
 		PortalBind: "127.0.0.1",
 		LogFile:    "sweetty.log",
 		Listeners:  listeners,
 	}
-}
-
-// randomPortalPort returns a high port that does not collide with the honeypot
-// service ports and is not a fixed well-known value an attacker could probe for.
-func randomPortalPort() int {
-	return 20000 + mrand.IntN(40000)
 }
 
 // Write writes cfg to path, failing if the file already exists, with mode 0600.
@@ -108,7 +110,7 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 	if cfg.PortalPort == 0 {
-		cfg.PortalPort = 8443
+		cfg.PortalPort = defaultPortalPort
 	}
 	if cfg.LogFile == "" {
 		cfg.LogFile = "sweetty.log"
