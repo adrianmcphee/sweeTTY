@@ -180,7 +180,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <body>
 <div id="app">
 <aside id="sidebar">
-<div class="brand"><span class="mark" data-icon="brand"></span><div><div class="bt">sweetty</div><div class="bs">sensor console</div></div></div>
+<div class="brand"><span class="mark" data-icon="brand"></span><div><div class="bt">sweeTTY</div><div class="bs">honeypot console</div></div></div>
 <nav>
 <div class="navsec">Monitor</div>
 <div class="navitem active" data-view="feed"><span data-icon="feed"></span><span class="grow">Live feed</span></div>
@@ -379,7 +379,7 @@ if(e.event==='SESSION_END')loadRecordings();
 if(detailIP&&srcOf(e)===detailIP)scheduleDetailRefresh();
 }
 
-var VIEWS={feed:['Live feed','streaming events as they arrive'],sources:['Sources','every host that has touched the sensor'],recon:['Recon','port scans, geography, and client tooling'],honeytokens:['Honeytokens','planted bait and who tripped it']};
+var VIEWS={feed:['Live feed','streaming events as they arrive'],sources:['Sources','every host that has touched the honeypot'],recon:['Recon','port scans, geography, and client tooling'],honeytokens:['Honeytokens','planted bait and who tripped it']};
 var curView='feed';
 function showView(name){
 curView=name;
