@@ -139,9 +139,14 @@ func osImage(profile string) (arch, kernelRel, kernelVer, pretty string) {
 
 var (
 	envPool = []string{"prod", "prod", "prod", "prd", "stg", "ops", "core"}
-	dbRoles = []string{"db", "mysql", "pg", "data", "sql"}
-	bkRoles = []string{"backup", "bkp", "store", "nas", "vault", "archive"}
-	domains = []string{"ec2.internal", "internal", "lan", "corp", "local", "intranet"}
+	// regionPool are datacenter / region tags real fleets fold into hostnames.
+	regionPool = []string{"nyc1", "sfo3", "fra1", "lon1", "ams3", "sgp1", "syd1", "tor1", "use1", "usw2", "euw1", "apse1", "dc1", "dc3"}
+	// codenamePool are theme names ops teams reach for (myth, stars, stacks), used
+	// for hosts that wear a project name instead of a role.
+	codenamePool = []string{"atlas", "orion", "vega", "rigel", "titan", "juno", "hermes", "nyx", "draco", "lyra", "kraken", "hydra", "nimbus", "cobalt", "onyx", "slate", "ember", "helios"}
+	dbRoles      = []string{"db", "mysql", "pg", "data", "sql"}
+	bkRoles      = []string{"backup", "bkp", "store", "nas", "vault", "archive"}
+	domains      = []string{"ec2.internal", "internal", "lan", "corp", "local", "intranet"}
 
 	opensshPool = []string{
 		"OpenSSH_8.9p1 Ubuntu-3ubuntu0.6",
@@ -298,7 +303,7 @@ func GenerateProfile(name string) *Persona {
 		services = prof.build()
 	}
 	role := pick(prof.roles)
-	host := makeHostnameFromRole(role)
+	host := makeHostnameFromRole(prof.name, role)
 	arch, kernelRel, kernelVer, pretty := osImage(prof.name)
 
 	octet2 := pickInt([]int{0, 0, 1, 10, 16, 20, 30})
@@ -445,17 +450,62 @@ func (p *Persona) AcceptFrom(srcIP, user, pass string) (accepted, bruteForced bo
 	return false, false
 }
 
-func makeHostnameFromRole(role string) string {
+// makeHostnameFromRole builds a believable per-instance hostname. It draws from
+// several naming "schools" real fleets use rather than one template, so there is
+// no shared shape to fingerprint as the sweetty default, over a wide vocabulary
+// so two instances rarely collide. Appliances (the legacy profile) get
+// device-style names; servers get fleet-style ones. The role anchors most names
+// to the host's job.
+func makeHostnameFromRole(profile, role string) string {
+	if profile == "legacy" {
+		return makeApplianceHostname(role)
+	}
+	return makeServerHostname(role)
+}
+
+// makeServerHostname names a server the way a real ops team would, picking among
+// corporate role/env, region-coded, cloud-default ip-in-name, themed codename,
+// and scale-set node shapes.
+func makeServerHostname(role string) string {
 	env := pick(envPool)
+	switch mrand.IntN(8) {
+	case 0:
+		return fmt.Sprintf("%s-%s-%02d", role, env, 1+mrand.IntN(12)) // api-prod-04
+	case 1:
+		return fmt.Sprintf("%s%s%02d", env, role, 1+mrand.IntN(9)) // prodapi07
+	case 2:
+		return fmt.Sprintf("%s-%s-%02d", pick(regionPool), role, 1+mrand.IntN(12)) // nyc1-api-04
+	case 3:
+		return fmt.Sprintf("%s-%s%d", env, role, 1+mrand.IntN(6)) // prod-api3
+	case 4:
+		return fmt.Sprintf("ip-10-%d-%d-%d", mrand.IntN(64), mrand.IntN(254), 1+mrand.IntN(253)) // ip-10-40-2-13
+	case 5:
+		c := pick(codenamePool)
+		if chance(55) {
+			return fmt.Sprintf("%s-%02d", c, 1+mrand.IntN(9)) // orion-03
+		}
+		return c // atlas
+	case 6:
+		return fmt.Sprintf("%s-%s-pool%d-%s", env, role, 1+mrand.IntN(3), randHex(2)) // prod-api-pool1-9f3a
+	default:
+		return fmt.Sprintf("%s-%02d", role, 1+mrand.IntN(20)) // api-16 (plain, now rare)
+	}
+}
+
+// makeApplianceHostname names a consumer/edge appliance (DVR, camera, router,
+// NAS) the way its firmware would: a short model-ish tag with a serial or hex
+// suffix, not a datacenter name.
+func makeApplianceHostname(role string) string {
+	up := strings.ToUpper(role)
 	switch mrand.IntN(4) {
 	case 0:
-		return fmt.Sprintf("%s-%s-%02d", role, env, 1+mrand.IntN(9))
+		return fmt.Sprintf("%s-%s", up, strings.ToUpper(randHex(2))) // DVR-3F9A
 	case 1:
-		return fmt.Sprintf("%s%s%02d", env, role, 1+mrand.IntN(9))
+		return fmt.Sprintf("%s%04d", up, mrand.IntN(10000)) // CAM0451
 	case 2:
-		return fmt.Sprintf("%s-%02d", role, 1+mrand.IntN(20))
+		return fmt.Sprintf("%s-%02d", role, 1+mrand.IntN(20)) // router-07
 	default:
-		return fmt.Sprintf("%s-%s%d", env, role, 1+mrand.IntN(6))
+		return fmt.Sprintf("%s-%s", role, randHex(3)) // nas-9f3a1c
 	}
 }
 
@@ -579,7 +629,9 @@ func weakPassword(host string) string {
 
 // hostnameBase returns the leading alphabetic run of a hostname ("web-prod-03" ->
 // "web", "prodiot04" -> "prodiot"), a believable base for a hostname-derived
-// password. It returns "" if the name does not start with a letter.
+// password. It returns "" if the name does not start with a letter, or if that
+// run is shorter than three letters: an "ip"- or "db"-style stub makes a poor,
+// telling password word, so the caller falls back to its word list.
 func hostnameBase(host string) string {
 	i := 0
 	for i < len(host) {
@@ -588,6 +640,9 @@ func hostnameBase(host string) string {
 			break
 		}
 		i++
+	}
+	if i < 3 {
+		return ""
 	}
 	return strings.ToLower(host[:i])
 }

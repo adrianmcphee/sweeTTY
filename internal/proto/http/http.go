@@ -12,12 +12,15 @@ package http
 
 import (
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"html"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sweetty/internal/persona"
@@ -55,13 +58,26 @@ type Protocol struct {
 	persona *persona.Persona
 	style   string
 	sleep   func(time.Duration)
+
+	// wp* track WordPress login pressure per source so the admin "gives" only
+	// after persistent credential-stuffing, never to a one-shot bot. Guarded by mu
+	// because one Protocol serves every connection on the listener concurrently.
+	mu       sync.Mutex
+	wpTries  map[string]int
+	wpBroken map[string]bool
 }
 
 // New returns an HTTP protocol bound to the given persona and style. The style
 // is one of "wordpress", "tomcat", or "nginx-static"; any other value falls back
 // to a plain static server.
 func New(p *persona.Persona, style string) server.Protocol {
-	return &Protocol{persona: p, style: style, sleep: time.Sleep}
+	return &Protocol{
+		persona:  p,
+		style:    style,
+		sleep:    time.Sleep,
+		wpTries:  make(map[string]int),
+		wpBroken: make(map[string]bool),
+	}
 }
 
 // Name reports the protocol label used in logs and startup output.
@@ -99,13 +115,14 @@ func (pr *Protocol) Handle(s *server.Session) {
 	}
 	s.LogHTTPRequest(method, requestLine, path, headers)
 
+	var body string
 	if method == "POST" {
-		body := readBody(s, atoiSafe(headers["content-length"]))
+		body = readBody(s, atoiSafe(headers["content-length"]))
 		sum := sha256.Sum256([]byte(body))
 		s.LogHTTPPost(path, body, hex.EncodeToString(sum[:]))
 	}
 
-	resp, delay := pr.respond(method, path)
+	resp, delay := pr.respond(s, method, path, body)
 	if method == "HEAD" {
 		resp = headersOnly(resp)
 	}
@@ -299,15 +316,25 @@ func withHeader(base map[string]string, key, value string) map[string]string {
 
 // respond routes a request to the active style and returns the full response
 // plus the latency to apply before sending it.
-func (pr *Protocol) respond(method, path string) (string, time.Duration) {
+func (pr *Protocol) respond(s *server.Session, method, path, body string) (string, time.Duration) {
 	switch pr.style {
 	case "tomcat":
 		return pr.respondTomcat(method, path)
 	case "wordpress":
-		return pr.respondWordPress(method, path)
+		return pr.respondWordPress(s, sessionIP(s), method, path, body)
 	default:
 		return pr.respondNginx(method, path)
 	}
+}
+
+// sessionIP returns the source IP used to gate the WordPress trap, tolerating a
+// nil session so the stateless responders stay unit-testable without a live
+// connection.
+func sessionIP(s *server.Session) string {
+	if s == nil {
+		return ""
+	}
+	return s.SrcIP
 }
 
 // ---- WordPress ----
@@ -319,7 +346,7 @@ func (pr *Protocol) wpHeaders() map[string]string {
 	}
 }
 
-func (pr *Protocol) respondWordPress(method, path string) (string, time.Duration) {
+func (pr *Protocol) respondWordPress(s *server.Session, srcIP, method, path, body string) (string, time.Duration) {
 	base := pr.wpHeaders()
 	if method != "GET" && method != "HEAD" && method != "POST" {
 		// Apache answers a method it does not implement with 501 + an Allow header
@@ -340,6 +367,19 @@ func (pr *Protocol) respondWordPress(method, path string) (string, time.Duration
 
 	case route == "/wp-login.php":
 		if method == "POST" {
+			// Capture the guessed credential, then decide whether this source has
+			// done enough "work" to be let in. A real WordPress returns 302 either
+			// way; what differs is the destination and the logged-in cookie.
+			user, pass := parseWPLogin(body)
+			accepted := pr.wpLetIn(srcIP)
+			if s != nil {
+				s.LogCredentialResult(user, pass, accepted, accepted)
+			}
+			if accepted {
+				h := withHeader(base, "Location", "/wp-admin/")
+				h["Set-Cookie"] = wpLoggedInCookie(pr.persona)
+				return apacheResponse(302, "Found", "", "", h), loginPostDelay
+			}
 			h := withHeader(base, "Location", "/wp-login.php?error=invalid_credentials")
 			return apacheResponse(302, "Found", "", "", h), loginPostDelay
 		}
@@ -364,6 +404,11 @@ func (pr *Protocol) respondWordPress(method, path string) (string, time.Duration
 			"XML-RPC server accepts POST requests only.", h), 0
 
 	case strings.HasPrefix(route, "/wp-admin"):
+		// A source that has broken in lands in the dashboard; everyone else is
+		// bounced to the login like a real wp-admin guard.
+		if pr.wpBrokenIn(srcIP) {
+			return apacheResponse(200, "OK", "text/html; charset=UTF-8", wpSecretsPage(pr.persona), base), loginPageDelay
+		}
 		h := withHeader(base, "Location", "/wp-login.php?redirect_to=%2Fwp-admin%2F&reauth=1")
 		return apacheResponse(302, "Found", "", "", h), 0
 
@@ -376,6 +421,107 @@ func (pr *Protocol) respondWordPress(method, path string) (string, time.Duration
 	default:
 		return apacheResponse(404, "Not Found", "text/html; charset=UTF-8", wp404(pr.persona), base), notFoundDelay
 	}
+}
+
+// ---- WordPress break-in trap ----
+
+//go:embed secrets.html
+var jtArtDoc string
+
+// jtArtBody is the colour-ASCII payload carved out of the embedded libcaca
+// document, without its <html>/<head> wrapper, ready to drop into the dashboard.
+var jtArtBody = extractArtBody(jtArtDoc)
+
+func extractArtBody(doc string) string {
+	i := strings.Index(doc, "<body>")
+	j := strings.LastIndex(doc, "</body>")
+	if i >= 0 && j > i {
+		return doc[i+len("<body>") : j]
+	}
+	return doc
+}
+
+const (
+	// wpBreakInAfter is how many wp-login POSTs one source must send before the
+	// door gives. Persistent credential-stuffing earns the reveal; a drive-by bot
+	// that tries once and leaves never sees it, so the payoff only follows work.
+	wpBreakInAfter = 5
+	// wpTrackCap bounds the per-source tables so a spray from many forged source
+	// IPs cannot grow them without limit (the host is assumed hostile).
+	wpTrackCap = 50000
+)
+
+// wpLetIn records one login attempt from srcIP and reports whether the door now
+// opens. It opens once a source reaches wpBreakInAfter attempts and stays open
+// for that source thereafter.
+func (pr *Protocol) wpLetIn(srcIP string) bool {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	if pr.wpBroken[srcIP] {
+		return true
+	}
+	if _, seen := pr.wpTries[srcIP]; !seen && len(pr.wpTries) >= wpTrackCap {
+		return false // table full: do not begin tracking a brand-new source
+	}
+	pr.wpTries[srcIP]++
+	if pr.wpTries[srcIP] >= wpBreakInAfter {
+		delete(pr.wpTries, srcIP)
+		pr.wpBroken[srcIP] = true
+		return true
+	}
+	return false
+}
+
+// wpBrokenIn reports whether srcIP has already been let into wp-admin.
+func (pr *Protocol) wpBrokenIn(srcIP string) bool {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	return pr.wpBroken[srcIP]
+}
+
+// parseWPLogin pulls the username and password from a wp-login POST body (the
+// standard log/pwd form fields), tolerating anything malformed.
+func parseWPLogin(body string) (user, pass string) {
+	v, err := url.ParseQuery(body)
+	if err != nil {
+		return "", ""
+	}
+	return v.Get("log"), v.Get("pwd")
+}
+
+// wpLoggedInCookie mints a WordPress-shaped logged-in cookie. A real install
+// embeds a per-site hash in the cookie name; we derive a stable one from the
+// persona so it is consistent across a source's requests.
+func wpLoggedInCookie(p *persona.Persona) string {
+	sum := sha256.Sum256([]byte("wp-logged-in:" + p.Hostname))
+	return "wordpress_logged_in_" + hex.EncodeToString(sum[:])[:32] +
+		"=admin%7C9999999999%7Chash; path=/; HttpOnly"
+}
+
+// wpSecretsPage is the dashboard a broken-in attacker lands on: just enough
+// wp-admin chrome to read as real, wrapped around the reveal.
+func wpSecretsPage(p *persona.Persona) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard &lsaquo; %s &mdash; WordPress</title>
+<style>
+body{margin:0;background:#1d2327;color:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13px}
+#wpwrap{padding:20px}
+h1{font-weight:400;font-size:23px;margin:0 0 8px}
+.caca{overflow:auto}
+</style>
+</head>
+<body class="wp-admin wp-core-ui">
+<div id="wpwrap">
+<h1>Dashboard</h1>
+<p>Howdy, admin. You did the work. Here are the secrets.</p>
+<div class="caca">%s</div>
+</div>
+</body>
+</html>`, html.EscapeString(p.Hostname), jtArtBody)
 }
 
 func wpFrontPage(p *persona.Persona) string {

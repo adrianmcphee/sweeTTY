@@ -60,7 +60,7 @@ func TestRootResponseByStyle(t *testing.T) {
 	}
 	for _, c := range cases {
 		pr := New(p, c.style).(*Protocol)
-		resp, delay := pr.respond("GET", "/")
+		resp, delay := pr.respond(nil, "GET", "/", "")
 		if delay != 0 {
 			t.Errorf("%s: GET / delay = %v, want 0", c.style, delay)
 		}
@@ -93,7 +93,7 @@ func TestRootResponseByStyle(t *testing.T) {
 func TestWordPressRoutes(t *testing.T) {
 	pr := New(testPersona(), "wordpress").(*Protocol)
 
-	resp, delay := pr.respond("GET", "/wp-login.php")
+	resp, delay := pr.respond(nil, "GET", "/wp-login.php", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 200") || !strings.Contains(resp, `name="log"`) {
 		t.Errorf("GET /wp-login.php should be the login form: %q", firstLine(resp))
 	}
@@ -101,7 +101,7 @@ func TestWordPressRoutes(t *testing.T) {
 		t.Errorf("login page delay = %v, want %v", delay, loginPageDelay)
 	}
 
-	resp, delay = pr.respond("POST", "/wp-login.php")
+	resp, delay = pr.respond(nil, "POST", "/wp-login.php", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 302") || !strings.Contains(resp, "Location: /wp-login.php?error=") {
 		t.Errorf("POST /wp-login.php should be a 302 with error Location: %q", firstLine(resp))
 	}
@@ -109,12 +109,12 @@ func TestWordPressRoutes(t *testing.T) {
 		t.Errorf("login post delay = %v, want %v", delay, loginPostDelay)
 	}
 
-	resp, _ = pr.respond("GET", "/xmlrpc.php")
+	resp, _ = pr.respond(nil, "GET", "/xmlrpc.php", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 405") || !strings.Contains(resp, "Allow: POST") {
 		t.Errorf("GET /xmlrpc.php should be 405 with Allow: POST: %q", firstLine(resp))
 	}
 
-	resp, delay = pr.respond("POST", "/xmlrpc.php")
+	resp, delay = pr.respond(nil, "POST", "/xmlrpc.php", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 200") || !strings.Contains(resp, "<methodResponse>") || !strings.Contains(resp, "<fault>") {
 		t.Errorf("POST /xmlrpc.php should be an XML-RPC fault: %q", firstLine(resp))
 	}
@@ -122,22 +122,22 @@ func TestWordPressRoutes(t *testing.T) {
 		t.Errorf("xmlrpc delay = %v, want %v", delay, xmlrpcPostDelay)
 	}
 
-	resp, _ = pr.respond("GET", "/wp-admin/")
+	resp, _ = pr.respond(nil, "GET", "/wp-admin/", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 302") || !strings.Contains(resp, "Location: /wp-login.php") {
 		t.Errorf("GET /wp-admin/ should redirect to login: %q", firstLine(resp))
 	}
 
-	resp, _ = pr.respond("GET", "/readme.html")
+	resp, _ = pr.respond(nil, "GET", "/readme.html", "")
 	if !strings.Contains(resp, "Version 6.5.2") {
 		t.Errorf("GET /readme.html should show Version 6.5.2: %q", firstLine(resp))
 	}
 
-	resp, _ = pr.respond("GET", "/robots.txt")
+	resp, _ = pr.respond(nil, "GET", "/robots.txt", "")
 	if !strings.Contains(resp, "Disallow: /wp-admin/") || !strings.Contains(resp, "admin-ajax.php") {
 		t.Errorf("robots.txt content wrong: %q", resp)
 	}
 
-	resp, delay = pr.respond("GET", "/does-not-exist")
+	resp, delay = pr.respond(nil, "GET", "/does-not-exist", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 404") || delay != notFoundDelay {
 		t.Errorf("unknown path should be 404 with %v delay: %q delay=%v", notFoundDelay, firstLine(resp), delay)
 	}
@@ -146,7 +146,7 @@ func TestWordPressRoutes(t *testing.T) {
 func TestTomcatRoutes(t *testing.T) {
 	pr := New(testPersona(), "tomcat").(*Protocol)
 	for _, path := range []string{"/manager/html", "/host-manager/html"} {
-		resp, delay := pr.respond("GET", path)
+		resp, delay := pr.respond(nil, "GET", path, "")
 		if !strings.HasPrefix(resp, "HTTP/1.1 401") {
 			t.Errorf("%s should be 401: %q", path, firstLine(resp))
 		}
@@ -157,7 +157,7 @@ func TestTomcatRoutes(t *testing.T) {
 			t.Errorf("%s delay = %v, want %v", path, delay, managerAuthDelay)
 		}
 	}
-	resp, _ := pr.respond("GET", "/whatever")
+	resp, _ := pr.respond(nil, "GET", "/whatever", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 404") || !strings.Contains(resp, "Apache Tomcat/10.1.18") {
 		t.Errorf("tomcat 404 wrong: %q", firstLine(resp))
 	}
@@ -165,7 +165,7 @@ func TestTomcatRoutes(t *testing.T) {
 
 func TestNginxRoutes(t *testing.T) {
 	pr := New(testPersona(), "nginx-static").(*Protocol)
-	resp, _ := pr.respond("GET", "/missing")
+	resp, _ := pr.respond(nil, "GET", "/missing", "")
 	if !strings.HasPrefix(resp, "HTTP/1.1 404") || !strings.Contains(resp, "nginx/1.24.0") {
 		t.Errorf("nginx 404 should carry the version: %q", firstLine(resp))
 	}
