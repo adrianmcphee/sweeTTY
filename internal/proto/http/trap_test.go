@@ -78,4 +78,33 @@ func TestJTArtEmbedded(t *testing.T) {
 	if strings.Contains(jtArtBody, "<head>") || strings.Contains(jtArtBody, "libcaca") {
 		t.Fatal("art body should have its html/head wrapper stripped")
 	}
+	if len(jtBackupBody) < 1000 || !strings.Contains(jtBackupBody, "<span") {
+		t.Fatalf("embedded backup art looks wrong: %d bytes", len(jtBackupBody))
+	}
+	if jtBackupBody == jtArtBody {
+		t.Fatal("the first and deeper reveals should be different images")
+	}
+}
+
+// TestWPDeepRevealAfterLotsOfWork checks the deeper reveal replaces the first one
+// only after a lot of post-break-in wp-admin views.
+func TestWPDeepRevealAfterLotsOfWork(t *testing.T) {
+	pr := New(persona.Generate(), "wordpress").(*Protocol)
+	src := "203.0.113.40"
+	for range wpBreakInAfter {
+		pr.respondWordPress(nil, src, "POST", "/wp-login.php", "log=admin&pwd=x")
+	}
+	if !pr.wpBrokenIn(src) {
+		t.Fatal("source should be broken in after the login gate")
+	}
+	for i := 1; i < wpDeepAfter; i++ {
+		resp, _ := pr.respondWordPress(nil, src, "GET", "/wp-admin/", "")
+		if !strings.Contains(resp, jtArtBody) {
+			t.Fatalf("wp-admin view %d should still be the first reveal", i)
+		}
+	}
+	resp, _ := pr.respondWordPress(nil, src, "GET", "/wp-admin/", "")
+	if !strings.Contains(resp, "kept digging") || !strings.Contains(resp, jtBackupBody) {
+		t.Fatalf("deep reveal not shown after %d views: %q", wpDeepAfter, firstLine(resp))
+	}
 }

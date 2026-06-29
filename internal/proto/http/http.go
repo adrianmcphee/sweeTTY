@@ -62,9 +62,10 @@ type Protocol struct {
 	// wp* track WordPress login pressure per source so the admin "gives" only
 	// after persistent credential-stuffing, never to a one-shot bot. Guarded by mu
 	// because one Protocol serves every connection on the listener concurrently.
-	mu       sync.Mutex
-	wpTries  map[string]int
-	wpBroken map[string]bool
+	mu          sync.Mutex
+	wpTries     map[string]int
+	wpBroken    map[string]bool
+	wpAdminHits map[string]int
 }
 
 // New returns an HTTP protocol bound to the given persona and style. The style
@@ -72,11 +73,12 @@ type Protocol struct {
 // to a plain static server.
 func New(p *persona.Persona, style string) server.Protocol {
 	return &Protocol{
-		persona:  p,
-		style:    style,
-		sleep:    time.Sleep,
-		wpTries:  make(map[string]int),
-		wpBroken: make(map[string]bool),
+		persona:     p,
+		style:       style,
+		sleep:       time.Sleep,
+		wpTries:     make(map[string]int),
+		wpBroken:    make(map[string]bool),
+		wpAdminHits: make(map[string]int),
 	}
 }
 
@@ -404,13 +406,18 @@ func (pr *Protocol) respondWordPress(s *server.Session, srcIP, method, path, bod
 			"XML-RPC server accepts POST requests only.", h), 0
 
 	case strings.HasPrefix(route, "/wp-admin"):
-		// A source that has broken in lands in the dashboard; everyone else is
-		// bounced to the login like a real wp-admin guard.
-		if pr.wpBrokenIn(srcIP) {
+		// A source that has broken in lands in the dashboard; what it sees deepens
+		// with how much it pokes around. Everyone else is bounced to the login like
+		// a real wp-admin guard.
+		switch pr.wpAdminReveal(srcIP) {
+		case "deep":
+			return apacheResponse(200, "OK", "text/html; charset=UTF-8", wpBackupPage(pr.persona), base), loginPageDelay
+		case "first":
 			return apacheResponse(200, "OK", "text/html; charset=UTF-8", wpSecretsPage(pr.persona), base), loginPageDelay
+		default:
+			h := withHeader(base, "Location", "/wp-login.php?redirect_to=%2Fwp-admin%2F&reauth=1")
+			return apacheResponse(302, "Found", "", "", h), 0
 		}
-		h := withHeader(base, "Location", "/wp-login.php?redirect_to=%2Fwp-admin%2F&reauth=1")
-		return apacheResponse(302, "Found", "", "", h), 0
 
 	case route == "/readme.html":
 		return apacheResponse(200, "OK", "text/html; charset=UTF-8", wpReadme(pr.persona), base), 0
@@ -428,9 +435,14 @@ func (pr *Protocol) respondWordPress(s *server.Session, srcIP, method, path, bod
 //go:embed secrets.html
 var jtArtDoc string
 
-// jtArtBody is the colour-ASCII payload carved out of the embedded libcaca
-// document, without its <html>/<head> wrapper, ready to drop into the dashboard.
+//go:embed backup.html
+var jtBackupDoc string
+
+// jtArtBody and jtBackupBody are the colour-ASCII payloads carved out of the
+// embedded libcaca documents, without their <html>/<head> wrapper, ready to drop
+// into a dashboard. The first shows on break-in; the second after a lot more work.
 var jtArtBody = extractArtBody(jtArtDoc)
+var jtBackupBody = extractArtBody(jtBackupDoc)
 
 func extractArtBody(doc string) string {
 	i := strings.Index(doc, "<body>")
@@ -449,6 +461,9 @@ const (
 	// wpTrackCap bounds the per-source tables so a spray from many forged source
 	// IPs cannot grow them without limit (the host is assumed hostile).
 	wpTrackCap = 50000
+	// wpDeepAfter is how many wp-admin views a broken-in source makes before the
+	// deeper reveal replaces the first one: the payoff for really digging around.
+	wpDeepAfter = 10
 )
 
 // wpLetIn records one login attempt from srcIP and reports whether the door now
@@ -477,6 +492,22 @@ func (pr *Protocol) wpBrokenIn(srcIP string) bool {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	return pr.wpBroken[srcIP]
+}
+
+// wpAdminReveal reports what a wp-admin request should serve for srcIP: "" (not
+// broken in, redirect to login), "first" (the first reveal), or "deep" (the
+// deeper reveal, after wpDeepAfter views of poking around).
+func (pr *Protocol) wpAdminReveal(srcIP string) string {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	if !pr.wpBroken[srcIP] {
+		return ""
+	}
+	pr.wpAdminHits[srcIP]++
+	if pr.wpAdminHits[srcIP] >= wpDeepAfter {
+		return "deep"
+	}
+	return "first"
 }
 
 // parseWPLogin pulls the username and password from a wp-login POST body (the
@@ -522,6 +553,32 @@ h1{font-weight:400;font-size:23px;margin:0 0 8px}
 </div>
 </body>
 </html>`, html.EscapeString(p.Hostname), jtArtBody)
+}
+
+// wpBackupPage is the deeper reveal, shown only after a lot of post-break-in
+// poking around, themed as a discovered backup.
+func wpBackupPage(p *persona.Persona) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backups &lsaquo; %s &mdash; WordPress</title>
+<style>
+body{margin:0;background:#1d2327;color:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13px}
+#wpwrap{padding:20px}
+h1{font-weight:400;font-size:23px;margin:0 0 8px}
+.caca{overflow:auto}
+</style>
+</head>
+<body class="wp-admin wp-core-ui">
+<div id="wpwrap">
+<h1>Backups</h1>
+<p>You really kept digging. Here is the backup.</p>
+<div class="caca">%s</div>
+</div>
+</body>
+</html>`, html.EscapeString(p.Hostname), jtBackupBody)
 }
 
 func wpFrontPage(p *persona.Persona) string {
