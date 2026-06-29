@@ -483,9 +483,11 @@ func TestBaitImageRevealsTheGag(t *testing.T) {
 		t.Fatalf("cat of bait did not render the colour-ANSI reveal: %.120q", out)
 	}
 
-	// base64 carries the same reveal off the box: it decodes to the ANSI art, never
-	// a real image to walk away with. Align to a 4-byte boundary so a stream the
-	// harness only partly drained still decodes.
+	// base64 is the exfil channel: it now hands over a real JPEG of Justin
+	// Timberlake (the wallet/seed bait gets the full-length shot), so an attacker
+	// who copies the blob and decodes it locally opens a picture of JT rather than
+	// any real secret. Align to a 4-byte boundary so a partly-drained stream still
+	// decodes; the JPEG magic is in the first bytes, so a partial read still proves it.
 	h.SendLine("base64 " + bait)
 	b64 := longestB64Line(h.ReadFor(2 * time.Second))
 	b64 = b64[:len(b64)/4*4]
@@ -493,11 +495,8 @@ func TestBaitImageRevealsTheGag(t *testing.T) {
 	if err != nil || len(raw) < 16 {
 		t.Fatalf("base64 of bait did not decode: %v (len %d)", err, len(raw))
 	}
-	if bytes.HasPrefix(raw, []byte("\x89PNG\r\n\x1a\n")) {
-		t.Fatal("base64 of bait yielded a real PNG; expected the reveal art")
-	}
-	if !bytes.Contains(raw, []byte("\x1b[")) {
-		t.Fatalf("decoded base64 is not the colour-ANSI reveal: % x", raw[:min(16, len(raw))])
+	if !bytes.HasPrefix(raw, []byte("\xff\xd8\xff")) {
+		t.Fatalf("base64 of bait should decode to a real JPEG (the JT photo), got: % x", raw[:min(16, len(raw))])
 	}
 
 	// Both grabs were captured as honeytoken hits.

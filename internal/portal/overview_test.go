@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestOverviewAggregates drives a mixed log (scans, a session with commands and a
@@ -190,6 +191,68 @@ func TestOverviewAggregates(t *testing.T) {
 // has seen more sources and user agents than the response caps: the totals report
 // the true counts while the returned lists are truncated to the caps, and the
 // truncation keeps the busiest sources (it sorts before it cuts).
+// TestOverviewTodayCounts checks the live-feed stat cards' source of truth: the
+// server-side "today" block counts only events dated today (UTC) over the full
+// log, so a busy sensor's cards are not undercounted by the browser's capped event
+// buffer. Past-dated events count toward cumulative totals but not toward today.
+func TestOverviewTodayCounts(t *testing.T) {
+	p := newTestPortal(t)
+	today := time.Now().UTC().Format("2006-01-02")
+	lines := []string{
+		`{"time":"` + today + `T08:00:00Z","event":"SESSION_START","src_ip":"9.9.9.9","ip":"9.9.9.9:1","session":"a","port":22,"protocol":"ssh"}`,
+		`{"time":"` + today + `T08:00:01Z","event":"PORT_SCAN","src_ip":"9.9.9.9","ip":"9.9.9.9:1","port":23,"protocol":"telnet"}`,
+		`{"time":"` + today + `T08:00:02Z","event":"HONEYTOKEN","src_ip":"9.9.9.9","ip":"9.9.9.9:1","session":"a","note":"vault"}`,
+		`{"time":"` + today + `T08:00:03Z","event":"DOWNLOAD_ATTEMPT","src_ip":"8.8.4.4","ip":"8.8.4.4:2","port":80,"protocol":"http","url":"http://evil/x"}`,
+		// A past day: counts toward cumulative totals, never toward today.
+		`{"time":"2020-01-01T10:00:00Z","event":"SESSION_START","src_ip":"1.1.1.1","ip":"1.1.1.1:3","session":"b","port":22,"protocol":"ssh"}`,
+		`{"time":"2020-01-01T10:00:01Z","event":"PORT_SCAN","src_ip":"1.1.1.1","ip":"1.1.1.1:3","port":23,"protocol":"telnet"}`,
+	}
+	if err := os.WriteFile(p.cfg.LogFile, []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+
+	eng := p.engine()
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/overview", nil)
+	w := httptest.NewRecorder()
+	eng.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("overview: status %d", w.Code)
+	}
+	var body struct {
+		Totals struct {
+			Sessions int `json:"sessions"`
+		} `json:"totals"`
+		Today struct {
+			Sessions  int `json:"sessions"`
+			Sources   int `json:"sources"`
+			Downloads int `json:"downloads"`
+			Bait      int `json:"bait"`
+			PortScans int `json:"port_scans"`
+		} `json:"today"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Totals.Sessions != 2 {
+		t.Errorf("cumulative sessions = %d, want 2 (today + the past one)", body.Totals.Sessions)
+	}
+	if body.Today.Sessions != 1 {
+		t.Errorf("today.sessions = %d, want 1", body.Today.Sessions)
+	}
+	if body.Today.Sources != 2 {
+		t.Errorf("today.sources = %d, want 2 (9.9.9.9 and 8.8.4.4)", body.Today.Sources)
+	}
+	if body.Today.PortScans != 1 {
+		t.Errorf("today.port_scans = %d, want 1 (the past scan excluded)", body.Today.PortScans)
+	}
+	if body.Today.Bait != 1 {
+		t.Errorf("today.bait = %d, want 1", body.Today.Bait)
+	}
+	if body.Today.Downloads != 1 {
+		t.Errorf("today.downloads = %d, want 1", body.Today.Downloads)
+	}
+}
+
 func TestOverviewCapsBusySensor(t *testing.T) {
 	p := newTestPortal(t)
 	const nSrc, nUA = 350, 60

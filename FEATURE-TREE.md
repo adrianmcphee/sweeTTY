@@ -76,7 +76,7 @@ network, executing attacker input, or writing to the host disk.
 
 - **ssh to the backup host named in the breadcrumb trail reaches a second coherent host; the pivot credential is captured**. _internal/proto/telnet: TestPivotToJustinTimberlakeHost_
 - **Bait files live at a randomized per-instance path (`persona.LootPath`) reached via the shell history; ls, stat, and file report a normal image**. _internal/proto/telnet: TestPivotToJustinTimberlakeHost_
-- **Any read of a bait image (cat, base64, an ASCII image viewer) returns the embedded colour-ANSI reveal, not file bytes, and logs a HONEYTOKEN**. _internal/proto/telnet: TestBaitImageRevealsTheGag_
+- **On-box reads of a bait image (cat, an ASCII image viewer, the vault command) render the embedded colour-ANSI reveal immediately; base64 (the exfil channel) hands over a real Justin Timberlake JPEG so an attacker who copies the blob and decodes it locally opens a picture of JT off-box rather than any real secret. Every path logs a HONEYTOKEN**. _internal/proto/telnet: TestBaitImageRevealsTheGag_
 - **Running the fake vault or wallet logs a HONEYTOKEN**. _internal/proto/telnet: TestHoneytokenVaultIsTracked_
 
 ## Resource limits and tarpits (VISION §5)
@@ -141,6 +141,7 @@ network, executing attacker input, or writing to the host disk.
 - **The portal binds loopback and serves the dashboard over plain HTTP with no application auth**: the root and every data route answer directly with no cookie and no login redirect, the served HTML reaches nothing off-host, and every script-referenced element id resolves. _internal/portal: TestNoAuthServesDashboardDirectly, TestServedHTMLReachesNothingOffHost, TestDashboardScriptElementIDsResolve_
 - **The SSE feed uses byte-offset ids, resumes from Last-Event-ID, skips history on a fresh connect, ignores an unusable id, and streams appended lines**. _internal/portal: TestEventsFeedIDIsByteOffset, TestEventsFeedResumesFromLastEventID, TestEventsFeedFreshConnectSkipsExisting, TestEventsFeedIgnoresUnusableLastEventID, TestEventsFeedStreamsAppendedLines_
 - **Analytics aggregate the overview (with a busy-sensor cap), honeytokens, the filtered log query, and the recordings list**. _internal/portal: TestOverviewAggregates, TestOverviewCapsBusySensor, TestHoneytokensAggregates, TestLogQueryFilters, TestRecordingsListsCastIDsOnly_
+- **The live-feed stat cards are whole-UTC-day counts computed server-side over the full log (a `today` block in the overview), not from the browser's capped event buffer, so a busy sensor's cards are not undercounted**. _internal/portal: TestOverviewTodayCounts_
 - **The admin console proxy serves a local upstream over the same SSH tunnel, strips the prefix, hides the target, refuses a non-local target, and redirects bare to slash**. _internal/portal: TestAdminConsoleProxiesToLocalUpstream, TestAdminConsoleStripPrefix, TestAdminConsoleListHidesTarget, TestAdminConsoleRefusesNonLocalTarget, TestAdminConsoleBareRedirectsToSlash_
 
 ## Configuration and secrets

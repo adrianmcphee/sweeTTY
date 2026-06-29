@@ -340,20 +340,11 @@ div.addEventListener('click',function(){openIP(ip);});
 return div;
 }
 
-function todayUTC(){return new Date().toISOString().slice(0,10);}
+// The five stat cards are whole-UTC-day aggregates, so they are driven by the
+// server-side /dashboard/overview rollup (see applyOverview), not the capped
+// in-page event buffer, which only ever holds the last few hundred events and so
+// undercounts a busy sensor. The feed counter is the one genuine buffer measure.
 function computeStats(){
-var today=todayUTC(),sessions=0,downloads=0,bait=0,scans=0,ips={};
-for(var i=0;i<entries.length;i++){
-var e=entries[i],s=srcOf(e);
-if(s)ips[s]=true;
-if(e.event==='SESSION_START'&&String(e.time).slice(0,10)===today)sessions++;
-if(e.event==='DOWNLOAD_ATTEMPT')downloads++;
-if(e.event==='HONEYTOKEN')bait++;
-if(e.event==='PORT_SCAN')scans++;
-}
-var nip=Object.keys(ips).length;
-setNum('s_sessions',sessions);setNum('s_ips',nip);setNum('s_dl',downloads);setNum('s_ht',bait);setNum('s_scans',scans);
-setNum('nav_ht',bait);
 setNum('feed_count',entries.length);
 }
 function setNum(id,v){var n=document.getElementById(id);if(n)n.textContent=v;}
@@ -485,13 +476,17 @@ function applyOverview(){
 if(!overview)return;
 var t=overview.totals||{};
 // The sidebar "Sources" badge shares the full-log total with the Sources panel
-// header, so the two never disagree. The feed stat cards (including port scans)
-// stay window-scoped and live via computeStats.
+// header so the two never disagree, and the five live-feed stat cards are
+// whole-UTC-day counts from the server rollup (overview.today), not the capped
+// in-page event buffer, so they stay accurate on a busy sensor.
 setNum('nav_src',t.sources||0);
 setNum('r_scans',t.port_scans||0);
 setNum('r_countries',(overview.by_country||[]).length);
 setNum('r_agents',t.user_agents||0);
 setNum('r_attempts',(t.credentials||0)+(t.http_requests||0)+(t.exec||0)+(t.downloads||0));
+var td=overview.today||{};
+setNum('s_sessions',td.sessions||0);setNum('s_ips',td.sources||0);setNum('s_dl',td.downloads||0);
+setNum('s_ht',td.bait||0);setNum('s_scans',td.port_scans||0);setNum('nav_ht',td.bait||0);
 if(curView==='sources')renderSources();
 if(curView==='recon')renderRecon();
 }

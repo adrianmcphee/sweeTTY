@@ -27,6 +27,9 @@ import (
 //go:embed reveal
 var revealArt embed.FS
 
+//go:embed loot
+var lootArt embed.FS
+
 func randomReveal() string {
 	entries, err := fs.ReadDir(revealArt, "reveal")
 	if err != nil {
@@ -68,6 +71,39 @@ func (sh *Shell) isLootImage(abs string) bool {
 func (sh *Shell) revealForLoot(kind, abs, cmd string) string {
 	sh.s.LogHoneytoken(kind+":"+path.Base(abs), cmd)
 	return strings.TrimRight(randomReveal(), "\n") + "\n"
+}
+
+// lootImageBytes returns the real image handed over when a bait file is base64'd
+// off the box: a Justin Timberlake photo, chosen by the bait's name (the
+// crypto/wallet/key stash gets the full-length shot), so an attacker who copies
+// the blob and decodes it locally opens a picture of JT rather than any real
+// secret. Returns nil if the asset is missing so the caller can fall back to the
+// ANSI reveal.
+func lootImageBytes(abs string) []byte {
+	name := strings.ToLower(path.Base(abs))
+	pick := ""
+	for _, kw := range []string{"wallet", "seed", "key", "crypto", "coin", "btc"} {
+		if strings.Contains(name, kw) {
+			pick = "jt4"
+			break
+		}
+	}
+	if pick == "" {
+		// Spread the generic stash across the headshots deterministically by name, so
+		// a given bait file always yields the same picture (coherent on repeated
+		// reads) while different files vary.
+		gens := []string{"jt3", "jt5"}
+		var h uint32
+		for _, c := range []byte(name) {
+			h = h*131 + uint32(c)
+		}
+		pick = gens[h%uint32(len(gens))]
+	}
+	b, err := lootArt.ReadFile("loot/" + pick + ".jpg")
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // isInteractive reports whether a command takes over the terminal IO (reads more
@@ -441,7 +477,17 @@ func (sh *Shell) cmdBase64(args []string, stdin string) (string, int) {
 		}
 		data = b
 		if sh.isLootImage(abs) {
-			data = []byte(sh.revealForLoot("loot-grab", abs, "base64 "+file))
+			// base64 is the exfil channel: hand over the real bytes of a Justin
+			// Timberlake photo, so an attacker who copies the blob and decodes it
+			// locally opens a picture of JT instead of any real secret. The grab is
+			// still logged as a honeytoken; the on-box paths (cat, image viewers, the
+			// vault command) keep rendering the ANSI reveal immediately.
+			sh.s.LogHoneytoken("loot-grab:"+path.Base(abs), "base64 "+file)
+			if img := lootImageBytes(abs); img != nil {
+				data = img
+			} else {
+				data = []byte(strings.TrimRight(randomReveal(), "\n") + "\n")
+			}
 		}
 	} else {
 		data = []byte(stdin)

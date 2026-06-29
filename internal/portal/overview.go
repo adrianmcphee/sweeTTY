@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -89,6 +90,11 @@ func (p *Portal) overview(c *gin.Context) {
 	uaSrcSeen := map[string]map[string]bool{}
 
 	var events, sessions, scans, creds, https, downloads, execs, bait int
+	// Whole-UTC-day counters for the live-feed stat cards, so they reflect the full
+	// log for today rather than the capped in-page event buffer the browser holds.
+	todayStr := time.Now().UTC().Format("2006-01-02")
+	var tSessions, tScans, tDownloads, tBait int
+	tSrc := map[string]bool{}
 
 	for _, e := range entries {
 		switch e.Event {
@@ -116,6 +122,20 @@ func (p *Portal) overview(c *gin.Context) {
 			execs++
 		case "HONEYTOKEN":
 			bait++
+		}
+
+		if len(e.Time) >= 10 && e.Time[:10] == todayStr {
+			tSrc[src] = true
+			switch e.Event {
+			case "SESSION_START":
+				tSessions++
+			case "PORT_SCAN":
+				tScans++
+			case "DOWNLOAD_ATTEMPT":
+				tDownloads++
+			case "HONEYTOKEN":
+				tBait++
+			}
 		}
 
 		row := bySrc[src]
@@ -188,6 +208,13 @@ func (p *Portal) overview(c *gin.Context) {
 			"exec":          execs,
 			"bait":          bait,
 			"user_agents":   len(uaStats),
+		},
+		"today": gin.H{
+			"sessions":   tSessions,
+			"sources":    len(tSrc),
+			"downloads":  tDownloads,
+			"bait":       tBait,
+			"port_scans": tScans,
 		},
 		"by_port":     sortedPorts(portStats),
 		"by_country":  countryRollup(order, bySrc),
