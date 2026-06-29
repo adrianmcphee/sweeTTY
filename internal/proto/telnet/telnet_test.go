@@ -487,6 +487,26 @@ func TestCommandSubstitution(t *testing.T) {
 	}
 }
 
+// TestBracketTestBuiltin checks the [ / test builtin powers the loader fallback
+// idiom `[ -f X ] && cmd` (and its `|| else` form).
+func TestBracketTestBuiltin(t *testing.T) {
+	h, p := setup(t, "ubuntu")
+	login(t, h, p, "root")
+
+	if out := run(h, `[ -f /proc/version ] && echo HASVER`); !strings.Contains(out, "HASVER") {
+		t.Errorf("[ -f /proc/version ] should be true: %.120q", out)
+	}
+	if out := run(h, `[ -f /no/such/file ] && echo YES || echo MISSING`); !strings.Contains(out, "MISSING") {
+		t.Errorf("[ -f missing ] && .. || .. wrong: %.120q", out)
+	}
+	if out := run(h, `[ -d /etc ] && echo ISDIR`); !strings.Contains(out, "ISDIR") {
+		t.Errorf("[ -d /etc ] should be true: %.120q", out)
+	}
+	if out := run(h, `test aarch64 = aarch64 && echo MATCH`); !strings.Contains(out, "MATCH") {
+		t.Errorf("test string equality failed: %.120q", out)
+	}
+}
+
 func TestBaitImageRevealsTheGag(t *testing.T) {
 	h, p := setup(t, "ubuntu")
 	login(t, h, p, "root")

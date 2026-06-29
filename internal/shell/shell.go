@@ -381,6 +381,89 @@ func stageString(st statement) string {
 	return strings.Join(parts, " | ")
 }
 
+// cmdTest implements the [ / test builtin: it evaluates a condition and returns an
+// exit code (0 true, 1 false) with no output, so chains like `[ -f X ] && cmd`
+// work. It covers the predicates loader recon uses: -f/-d/-e/-s/-r/-w/-x file
+// tests, -z/-n string tests, =/!= and -eq..-ge comparisons, a bare non-empty
+// string, and a leading ! negation.
+func (sh *Shell) cmdTest(args []string) (string, int) {
+	a := args[1:]
+	if args[0] == "[" {
+		if len(a) == 0 || a[len(a)-1] != "]" {
+			return "-bash: [: missing `]'\n", 2
+		}
+		a = a[:len(a)-1]
+	}
+	neg := false
+	if len(a) > 0 && a[0] == "!" {
+		neg = true
+		a = a[1:]
+	}
+	res := sh.evalTest(a)
+	if neg {
+		res = !res
+	}
+	if res {
+		return "", 0
+	}
+	return "", 1
+}
+
+func (sh *Shell) evalTest(a []string) bool {
+	switch len(a) {
+	case 1:
+		return a[0] != "" // [ STR ] is true when STR is non-empty
+	case 2:
+		op, operand := a[0], a[1]
+		switch op {
+		case "-f":
+			n, err := sh.fs.Stat(operand)
+			return err == nil && !n.IsDir()
+		case "-d":
+			n, err := sh.fs.Stat(operand)
+			return err == nil && n.IsDir()
+		case "-e", "-r", "-w", "-x":
+			return sh.fs.Exists(operand)
+		case "-s":
+			n, err := sh.fs.Stat(operand)
+			return err == nil && n.Size() > 0
+		case "-z":
+			return operand == ""
+		case "-n":
+			return operand != ""
+		}
+	case 3:
+		l, op, r := a[0], a[1], a[2]
+		switch op {
+		case "=", "==":
+			return l == r
+		case "!=":
+			return l != r
+		case "-eq", "-ne", "-lt", "-le", "-gt", "-ge":
+			li, le := strconv.Atoi(l)
+			ri, re := strconv.Atoi(r)
+			if le != nil || re != nil {
+				return false
+			}
+			switch op {
+			case "-eq":
+				return li == ri
+			case "-ne":
+				return li != ri
+			case "-lt":
+				return li < ri
+			case "-le":
+				return li <= ri
+			case "-gt":
+				return li > ri
+			case "-ge":
+				return li >= ri
+			}
+		}
+	}
+	return false
+}
+
 // runCommand dispatches a non-interactive command and returns its stdout and an
 // exit code.
 func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
@@ -395,6 +478,8 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 		return sh.cmdLs(args), 0
 	case "cat":
 		return sh.cmdCat(args)
+	case "[", "test":
+		return sh.cmdTest(args)
 	case "pwd":
 		return sh.fs.Cwd() + "\n", 0
 	case "cd":
