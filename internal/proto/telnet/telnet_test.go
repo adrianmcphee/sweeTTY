@@ -921,3 +921,53 @@ func hasLine(out, target string) bool {
 	}
 	return false
 }
+
+// TestApplianceMenuEscapeIsSilentShellTransition checks that on the appliance
+// (IoT) persona the Mirai menu-escape tokens succeed silently — the device's
+// CLI-to-shell transition — and leave a working shell, so a loader proceeds to
+// recon and the payload pull instead of bailing on a bash "command not found".
+func TestApplianceMenuEscapeIsSilentShellTransition(t *testing.T) {
+	p := persona.GenerateProfile("legacy")
+	fs, err := fakehost.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := testharness.New(telnet.New(fs, p, "ubuntu"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.Close)
+	login(t, h, p, "root")
+
+	for _, tok := range []string{"enable", "system", "shell", "linuxshell"} {
+		out := run(h, tok)
+		if strings.Contains(out, "not found") || strings.Contains(out, "-bash") {
+			t.Errorf("appliance %q should be a silent shell transition, got %q", tok, out)
+		}
+	}
+	// The shell still works after the escape sequence: recon returns real output.
+	if out := run(h, "uname -m"); !strings.Contains(out, "aarch64") {
+		t.Errorf("shell broken after menu escape: %q", out)
+	}
+}
+
+// TestServerMenuEscapeStaysCommandNotFound checks that on a server persona, which
+// is already a bash shell where the IoT menu words are not real commands, the
+// escape tokens stay "command not found" — the coherent response for a real box.
+func TestServerMenuEscapeStaysCommandNotFound(t *testing.T) {
+	p := persona.GenerateProfile("full")
+	fs, err := fakehost.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := testharness.New(telnet.New(fs, p, "ubuntu"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.Close)
+	login(t, h, p, "root")
+
+	if out := run(h, "system"); !strings.Contains(out, "command not found") {
+		t.Errorf("server menu-escape should be command not found, got %q", out)
+	}
+}

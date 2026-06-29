@@ -649,6 +649,19 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 		return sh.cmdDpkg(args), 0
 	case "sleep", "true", ":", "clear", "kill", "killall", "sync", "reset":
 		return "", 0
+	case "enable", "system", "shell", "linuxshell":
+		// Mirai-class loaders fire these "menu escape" tokens the instant they log in,
+		// to break out of a restricted IoT CLI into a raw shell. On the appliance persona
+		// the escape "succeeds" silently — the device-authentic CLI-to-shell transition —
+		// so the loader believes it reached a shell and goes on to its busybox probe,
+		// recon, and payload pull, every step of which we already capture. The token
+		// itself does nothing: no exec, no fetch, no write, no state change; it is the
+		// safest possible builtin. On a server persona, which is already a bash shell and
+		// where these are not real commands, they stay "command not found" — coherent.
+		if sh.p.IsAppliance() {
+			return "", 0
+		}
+		return "-bash: " + base + ": command not found\n", 127
 	case "false":
 		return "", 1
 	case "sudo":

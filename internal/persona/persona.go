@@ -466,6 +466,10 @@ func (p *Persona) AcceptFrom(srcIP, user, pass string) (accepted, bruteForced bo
 // legacy profile, an ARM appliance) rather than a server.
 func (p *Persona) isAppliance() bool { return p.Profile == "legacy" }
 
+// IsAppliance is the exported gate for callers outside this package: the shell
+// tailors its menu-escape handling to whether the host is an IoT/edge device.
+func (p *Persona) IsAppliance() bool { return p.isAppliance() }
+
 // applianceRootDefaults are factory default root passwords real IoT/edge devices
 // ship with, the corpus Mirai-class loaders spray. Accepting these on an appliance
 // persona is accurate for the hardware, not a tell.
