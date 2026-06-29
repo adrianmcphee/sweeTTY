@@ -432,6 +432,24 @@ func (sh *Shell) cmdBusybox(args []string) (string, int) {
 	return applet + ": applet not found\n", 127
 }
 
+// cmdNproc reports the online CPU count, kept coherent with /proc/cpuinfo by
+// counting its processor entries, so the loader's `nproc` and its
+// `grep -c "^processor" /proc/cpuinfo` fallback agree.
+func (sh *Shell) cmdNproc() string {
+	n := 0
+	if data, err := sh.fs.ReadFile("/proc/cpuinfo"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "processor") {
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		n = 1
+	}
+	return strconv.Itoa(n) + "\n"
+}
+
 func (sh *Shell) busyboxBanner() string {
 	return "BusyBox v" + sh.p.BusyBoxVer + " (Ubuntu 1:" + sh.p.BusyBoxVer + "-2ubuntu1) multi-call binary.\n" +
 		"BusyBox is copyright (C) 1998-2022 Erik Andersen, Rob Landley, Denys Vlasenko\n" +
@@ -554,6 +572,8 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 		return sh.cmdTest(args)
 	case "busybox":
 		return sh.cmdBusybox(args)
+	case "nproc":
+		return sh.cmdNproc(), 0
 	case "pwd":
 		return sh.fs.Cwd() + "\n", 0
 	case "cd":

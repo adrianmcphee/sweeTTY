@@ -547,6 +547,24 @@ func TestBusyboxAndPathResolution(t *testing.T) {
 	}
 }
 
+// TestUnameNprocUptime checks multi-flag uname emits all requested fields, nproc
+// returns a core count, and /proc/uptime exists, so the loader fingerprint's
+// UNAME/CPUS/UPTIME lines come back populated.
+func TestUnameNprocUptime(t *testing.T) {
+	h, p := setup(t, "ubuntu")
+	login(t, h, p, "root")
+
+	if out := run(h, `uname -s -v -n -m`); !strings.Contains(out, "Linux") || !strings.Contains(out, p.Hostname) || !strings.Contains(out, p.Arch) {
+		t.Errorf("uname -s -v -n -m incomplete: %.120q", out)
+	}
+	if out := run(h, `nproc`); strings.Contains(out, "not found") || !strings.ContainsAny(out, "123456789") {
+		t.Errorf("nproc should return a core count: %.120q", out)
+	}
+	if out := run(h, `cat /proc/uptime`); strings.Contains(out, "No such file") || !strings.Contains(out, ".") {
+		t.Errorf("/proc/uptime missing: %.120q", out)
+	}
+}
+
 func TestBaitImageRevealsTheGag(t *testing.T) {
 	h, p := setup(t, "ubuntu")
 	login(t, h, p, "root")

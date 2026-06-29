@@ -230,21 +230,59 @@ func (sh *Shell) cmdUname(args []string) string {
 	if len(args) == 1 {
 		return "Linux\n"
 	}
-	flag := args[1]
-	switch {
-	case strings.Contains(flag, "a"):
+	// Collect the requested fields across all flags (loaders combine them, e.g.
+	// `uname -s -v -n -m`); -a is everything. Emit in uname(1)'s canonical order
+	// (s n r v m p), space-joined, regardless of the flag order given.
+	var s, n, r, v, m, pr, all bool
+	for _, a := range args[1:] {
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		for _, c := range a[1:] {
+			switch c {
+			case 'a':
+				all = true
+			case 's':
+				s = true
+			case 'n':
+				n = true
+			case 'r':
+				r = true
+			case 'v':
+				v = true
+			case 'm':
+				m = true
+			case 'p', 'i':
+				pr = true
+			}
+		}
+	}
+	if all {
 		return sh.p.Uname() + "\n"
-	case strings.Contains(flag, "r"):
-		return sh.p.KernelRel + "\n"
-	case strings.Contains(flag, "n"):
-		return sh.p.Hostname + "\n"
-	case strings.Contains(flag, "m"):
-		return sh.p.Arch + "\n"
-	case strings.Contains(flag, "s"):
-		return "Linux\n"
-	default:
+	}
+	var parts []string
+	if s {
+		parts = append(parts, "Linux")
+	}
+	if n {
+		parts = append(parts, sh.p.Hostname)
+	}
+	if r {
+		parts = append(parts, sh.p.KernelRel)
+	}
+	if v {
+		parts = append(parts, sh.p.KernelVer)
+	}
+	if m {
+		parts = append(parts, sh.p.Arch)
+	}
+	if pr {
+		parts = append(parts, sh.p.Arch) // processor / hw platform: report the arch
+	}
+	if len(parts) == 0 {
 		return "Linux\n"
 	}
+	return strings.Join(parts, " ") + "\n"
 }
 
 func (sh *Shell) cmdHeadTail(args []string, stdin string, tail bool) (string, int) {
