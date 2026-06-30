@@ -167,6 +167,27 @@ func TestAnalyzeZeroGapBurstKeepsCadenceZero(t *testing.T) {
 	}
 }
 
+// A bot can run its kit at varied, multi-second intervals, which trips the
+// human-pacing signal. The verdict must stay a bot, and the human-pacing reason
+// must not appear alongside the bot evidence.
+func TestAnalyzeBotDoesNotShowHumanReason(t *testing.T) {
+	const b = 1_700_000_700_000
+	c := func(off int64, cmd string) event.Entry { e := at(b, off, "COMMAND"); e.Command = cmd; return e }
+	entries := []event.Entry{
+		at(b, 0, "SESSION_START"),
+		c(2_000, "uname -a"),
+		c(5_000, "cat /proc/cpuinfo"),
+		c(9_000, `echo "root:x"|chpasswd|bash`),
+	}
+	a := analyzeSource(entries)
+	if a.Kind != kindLoader {
+		t.Fatalf("kind = %q, want %q", a.Kind, kindLoader)
+	}
+	if reasonsContain(a.Reasons, "human") {
+		t.Errorf("a bot verdict must not carry a human-pacing reason: %v", a.Reasons)
+	}
+}
+
 // Two activity spans split by a long idle gap are two visits, and a source that
 // scanned and later came back to engage is flagged returning.
 func TestAnalyzeSegmentsVisitsAndReturning(t *testing.T) {

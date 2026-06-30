@@ -181,7 +181,6 @@ func verdict(s sourceSignals) (kind string, confidence int, reasons []string) {
 	human := 0
 	if s.humanPacing() {
 		human++
-		add("paced commands at human, varied intervals")
 	}
 
 	switch {
@@ -201,6 +200,7 @@ func verdict(s sourceSignals) (kind string, confidence int, reasons []string) {
 		}
 	case human > 0 && bot == 0:
 		kind = kindHuman
+		add("paced commands at human, varied intervals")
 	default:
 		kind = kindUnknown
 	}
