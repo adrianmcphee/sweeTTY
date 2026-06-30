@@ -100,7 +100,9 @@ func (p *Portal) byIP(c *gin.Context) {
 	if err != nil {
 		entries = nil
 	}
-	c.JSON(http.StatusOK, gin.H{"ip": ip, "entries": entries, "count": len(entries)})
+	// entries are chronological, so the assessment (visits, phases, bot/human
+	// verdict) reads the source's history in order.
+	c.JSON(http.StatusOK, gin.H{"ip": ip, "entries": entries, "count": len(entries), "profile": analyzeSource(entries)})
 }
 
 // bySession returns every entry for one connection id, in chronological order.

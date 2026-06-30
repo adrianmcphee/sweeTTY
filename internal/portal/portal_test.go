@@ -233,3 +233,41 @@ func TestLogQueryFilters(t *testing.T) {
 		t.Fatalf("ip 5.6.7.8 count = %v, want 2", ipAll["count"])
 	}
 }
+
+// TestByIPReturnsAssessment proves the per-IP drill-down carries the source
+// assessment alongside the raw entries: a source that logs in and changes root's
+// password reads as a loader that reached the exploit phase.
+func TestByIPReturnsAssessment(t *testing.T) {
+	p := newTestPortal(t)
+	lines := []string{
+		`{"time":"2026-06-27T10:00:00Z","event":"SESSION_START","src_ip":"9.8.7.6","ip":"9.8.7.6:5","session":"s","port":22,"protocol":"ssh"}`,
+		`{"time":"2026-06-27T10:00:01Z","event":"CREDENTIAL","src_ip":"9.8.7.6","ip":"9.8.7.6:5","session":"s","username":"root","password":"1qazxc"}`,
+		`{"time":"2026-06-27T10:00:02Z","event":"COMMAND","src_ip":"9.8.7.6","ip":"9.8.7.6:5","session":"s","command":"echo \"root:x\"|chpasswd|bash"}`,
+	}
+	if err := os.WriteFile(p.cfg.LogFile, []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	eng := p.engine()
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/ip/9.8.7.6", nil)
+	w := httptest.NewRecorder()
+	eng.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	var body struct {
+		Profile Assessment `json:"profile"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if body.Profile.Kind != kindLoader {
+		t.Fatalf("profile.kind = %q, want %q (reasons: %v)", body.Profile.Kind, kindLoader, body.Profile.Reasons)
+	}
+	if !containsStr(body.Profile.Phases, phaseExploit) {
+		t.Errorf("profile.phases = %v, want to include %q", body.Profile.Phases, phaseExploit)
+	}
+	if len(body.Profile.Reasons) == 0 {
+		t.Error("profile carries no reasons; the verdict should be explained")
+	}
+}
