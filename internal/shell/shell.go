@@ -242,7 +242,17 @@ func (sh *Shell) emit(stg stage, out string) {
 		return
 	}
 	if stg.outFile != "" {
-		if err := sh.fs.WriteFile(sh.fs.Resolve(stg.outFile), []byte(out)); errors.Is(err, vfs.ErrNoSpace) {
+		abs := sh.fs.Resolve(stg.outFile)
+		data := []byte(out)
+		// `>>` appends: concatenate onto any existing content so an echo-loader that
+		// builds a dropper across many appends accumulates it, rather than each write
+		// overwriting the last. A fresh copy avoids aliasing the overlay's bytes.
+		if stg.appendT {
+			if existing, err := sh.fs.ReadFile(abs); err == nil && len(existing) > 0 {
+				data = append(append(make([]byte, 0, len(existing)+len(out)), existing...), out...)
+			}
+		}
+		if err := sh.fs.WriteFile(abs, data); errors.Is(err, vfs.ErrNoSpace) {
 			// A full overlay reports the same thing a real full disk would, so the
 			// tarpit stays believable while the amplification attack dead-ends.
 			sh.s.Write("-bash: " + stg.outFile + ": No space left on device\r\n")

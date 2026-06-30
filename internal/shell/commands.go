@@ -213,17 +213,102 @@ func (sh *Shell) cmdCd(args []string) (string, int) {
 func (sh *Shell) cmdEcho(args []string) string {
 	rest := args[1:]
 	nl := true
-	for len(rest) > 0 && (rest[0] == "-n" || rest[0] == "-e" || rest[0] == "-ne" || rest[0] == "-en") {
+	escape := false
+	for len(rest) > 0 && (rest[0] == "-n" || rest[0] == "-e" || rest[0] == "-ne" || rest[0] == "-en" || rest[0] == "-E") {
 		if strings.Contains(rest[0], "n") {
 			nl = false
+		}
+		if strings.ContainsRune(rest[0], 'e') {
+			escape = true
+		}
+		if rest[0] == "-E" {
+			escape = false
 		}
 		rest = rest[1:]
 	}
 	out := strings.Join(rest, " ")
+	if escape {
+		out = decodeEchoEscapes(out)
+	}
 	if nl {
 		out += "\n"
 	}
 	return out
+}
+
+// decodeEchoEscapes interprets the backslash escapes that echo -e expands, most
+// importantly \xHH, so a BusyBox echo-loader that writes a dropper byte by byte
+// (echo -ne '\x7f\x45\x4c\x46' >> bin) reconstructs the real bytes in the overlay
+// rather than the literal text "\x7f...". Without this the dropped file is wrong
+// and its content cannot be recovered as an indicator.
+func decodeEchoEscapes(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		switch s[i] {
+		case 'n':
+			b.WriteByte('\n')
+		case 't':
+			b.WriteByte('\t')
+		case 'r':
+			b.WriteByte('\r')
+		case 'a':
+			b.WriteByte(7)
+		case 'b':
+			b.WriteByte(8)
+		case 'f':
+			b.WriteByte(12)
+		case 'v':
+			b.WriteByte(11)
+		case 'e':
+			b.WriteByte(27)
+		case '\\':
+			b.WriteByte('\\')
+		case 'x':
+			h, n := 0, 0
+			for n < 2 && i+1 < len(s) && isHexDigit(s[i+1]) {
+				i++
+				h = h*16 + hexDigitVal(s[i])
+				n++
+			}
+			if n == 0 {
+				b.WriteString("\\x")
+			} else {
+				b.WriteByte(byte(h))
+			}
+		case '0':
+			o, n := 0, 0
+			for n < 3 && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '7' {
+				i++
+				o = o*8 + int(s[i]-'0')
+				n++
+			}
+			b.WriteByte(byte(o))
+		default:
+			b.WriteByte('\\')
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
+func isHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+func hexDigitVal(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10
+	default:
+		return int(c-'A') + 10
+	}
 }
 
 func (sh *Shell) cmdUname(args []string) string {

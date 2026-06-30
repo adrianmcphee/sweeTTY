@@ -189,6 +189,28 @@ func TestOverlayMutationVisible(t *testing.T) {
 	}
 }
 
+// TestEcholoaderReconstructsDropper proves the BusyBox echo-loader path works end
+// to end: echo -e decodes \xHH, and `>>` appends, so a dropper assembled one chunk
+// at a time accumulates the real reconstructed content rather than literal "\x.."
+// text or only the last chunk written.
+func TestEcholoaderReconstructsDropper(t *testing.T) {
+	h, p := setup(t, "ubuntu")
+	login(t, h, p, "root")
+
+	// echo -ne decodes the hex into the file.
+	run(h, `echo -ne '\x50\x6f\x72\x74' > /tmp/p`)
+	if out := run(h, "cat /tmp/p"); !strings.Contains(out, "Port") {
+		t.Fatalf("echo -ne did not decode hex into the file: %q", out)
+	}
+
+	// `>>` accumulates chunks rather than overwriting.
+	run(h, `echo -ne '\x48\x69' >> /tmp/d`)
+	run(h, `echo -ne '\x21' >> /tmp/d`)
+	if out := run(h, "cat /tmp/d"); !strings.Contains(out, "Hi!") {
+		t.Fatalf("`>>` did not accumulate the appended chunks: %q", out)
+	}
+}
+
 func TestParsingShapes(t *testing.T) {
 	h, p := setup(t, "ubuntu")
 	login(t, h, p, "root")
