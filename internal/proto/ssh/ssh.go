@@ -111,8 +111,9 @@ func (pr *Protocol) Handle(s *server.Session) {
 		PublicKeyCallback: func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
 			// Real Ubuntu offers publickey first. We hold no private half of any key, so
 			// this always fails, exactly like a server the attacker has no authorized key
-			// on, but we record the key they tried for attribution.
-			s.LogCommandNote("publickey "+key.Type()+" "+gossh.FingerprintSHA256(key), "ssh-pubkey-attempt")
+			// on, but we record the key they tried for attribution. It is an auth attempt,
+			// so it is logged as a credential, not a command.
+			s.LogPublicKey(conn.User(), key.Type(), gossh.FingerprintSHA256(key))
 			return nil, errAuthFailed
 		},
 	}

@@ -8,6 +8,8 @@ package ssh_test
 // VFS-backed shell that captures credentials and commands while executing nothing.
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"io"
 	"strings"
@@ -21,6 +23,48 @@ import (
 	"sweetty/internal/proto/ssh"
 	"sweetty/internal/testharness"
 )
+
+// TestPublicKeyOfferLoggedAsCredentialNotCommand proves an offered public key is
+// recorded as a credential attempt (with its fingerprint, for attribution), never
+// as a shell command. Logging it as a command inflated command counts and falsely
+// advanced a pubkey-spray bot, which never gets a shell, into the post-login phase.
+func TestPublicKeyOfferLoggedAsCredentialNotCommand(t *testing.T) {
+	h, _ := newSSH(t)
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	signer, err := gossh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatalf("signer: %v", err)
+	}
+	cfg := &gossh.ClientConfig{
+		User:            "root",
+		Auth:            []gossh.AuthMethod{gossh.PublicKeys(signer)},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	// We hold no private half of the key, so the handshake must fail.
+	if client, err := gossh.Dial("tcp", h.Addr(), cfg); err == nil {
+		client.Close()
+		t.Fatal("public-key auth should have failed; the honeypot authorizes no key")
+	}
+
+	cred, ok := h.FindEvent("CREDENTIAL")
+	if !ok {
+		t.Fatal("offered public key was not recorded as a CREDENTIAL event")
+	}
+	if cred.Note != "publickey rejected" {
+		t.Errorf("note = %q, want \"publickey rejected\"", cred.Note)
+	}
+	if !strings.Contains(cred.Password, "SHA256:") {
+		t.Errorf("credential should carry the key fingerprint, got password=%q", cred.Password)
+	}
+	if _, isCmd := h.FindEvent("COMMAND"); isCmd {
+		t.Error("offered public key was logged as a COMMAND; it must be a CREDENTIAL")
+	}
+}
 
 // newSSH spins up the interactive SSH service on a real TCP loopback listener and
 // returns the harness plus the generated persona. A TCP listener (not the

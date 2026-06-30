@@ -104,6 +104,7 @@ network, executing attacker input, or writing to the host disk.
 - **A completed handshake yields an interactive shell over the same VFS; kex and client are captured**. _internal/proto/ssh: TestInteractiveShellSession, TestSSHKexCaptured, TestSSHBannerFromPersonaAndClientCapture_
 - **The exec channel runs the shell, reports exit status, and captures download intent without fetching**. _internal/proto/ssh: TestInteractiveExecRunsTheShell, TestExecReportsExitStatus, TestSSHExecCapturesIntentWithoutFetching_
 - **Wrong password and unknown user are rejected**. _internal/proto/ssh: TestWrongPasswordRejected, TestUnknownUserRejected_
+- **An offered public key is recorded as a credential attempt (with its fingerprint), not a command**, so a pubkey-spray bot that never gets a shell does not inflate command counts or falsely reach the post-login phase. _internal/proto/ssh: TestPublicKeyOfferLoggedAsCredentialNotCommand_
 - **Cooked-TTY line discipline edits and terminates lines, swallows CRLF, and ends on Ctrl-D**. _internal/proto/ssh: TestCookedTTYEditsAndTerminatesLines, TestCookedTTYSwallowsCRLF, TestCookedTTYCtrlDEndsSession_
 
 ## HTTP, HTTPS, FTP

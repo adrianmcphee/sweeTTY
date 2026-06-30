@@ -345,6 +345,20 @@ func (s *Session) LogCredentialResult(user, pass string, accepted, bruteForced b
 	s.logger.Log(e)
 }
 
+// LogPublicKey records a public key an SSH client offered for authentication. We
+// hold no private half of any key, so it never authenticates; recording the key
+// type and fingerprint attributes the source (a bot is recognisable by the key set
+// it sprays). It is an auth attempt, so it is a CREDENTIAL event, not a COMMAND:
+// logging it as a command inflated command counts and falsely advanced a source
+// that never got a shell into the post-login phase.
+func (s *Session) LogPublicKey(user, keyType, fingerprint string) {
+	e := s.ev("CREDENTIAL")
+	e.Username = user
+	e.Password = keyType + " " + fingerprint
+	e.Note = "publickey rejected"
+	s.logger.Log(e)
+}
+
 // LogHoneytoken records access to a planted bait (a fake vault or wallet, or the
 // ascii-rendered portrait). It is a high-signal event: a legitimate user never
 // runs these, so every hit is an attacker, attributed by source IP and session.
