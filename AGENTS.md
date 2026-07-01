@@ -41,10 +41,11 @@ already hostile.
 ## Architecture conventions
 
 - **Stdlib-first, dependency-light.** Reach for the standard library before
-  anything else, and justify any new dependency in the PR. Today's set is
-  `github.com/gin-gonic/gin` (portal) and `golang.org/x/crypto` (SSH server); `go.mod`
-  is the source of truth. The telnet/IAC layer and every protocol are hand-rolled,
-  not pulled from a library, so the honeypot owns the exact bytes on the wire.
+  anything else, and justify any new dependency in the PR. The only non-stdlib
+  dependency is `golang.org/x/crypto` (SSH server handshake); `go.mod` is the
+  source of truth. The portal, the telnet/IAC layer, and every protocol are
+  hand-rolled against net/http and net, not pulled from a framework, so the
+  honeypot owns the exact bytes on the wire and the binary stays auditable.
 - **One virtual filesystem is the single source of truth.** The `internal/vfs`
   package and the embedded `internal/fakehost/fakeroot/` tree back every file command. `ls`, `cat`, `cd`, `pwd`,
   `find`, `stat`, `head`, and `tail` all resolve against the same tree, so they can

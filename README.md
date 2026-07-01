@@ -1,10 +1,10 @@
 # SweeTTY
 
-A multi-protocol honeypot in a single Go binary. SweeTTY listens on many ports at once, presents a convincing fake service on each, and records every interaction as structured JSON. A built-in web portal (Gin) gives you a live dashboard over the activity, bound to loopback and reached over an SSH tunnel so it leaves no management footprint on the network.
+A multi-protocol honeypot in a single Go binary. SweeTTY listens on many ports at once, presents a convincing fake service on each, and records every interaction as structured JSON. A built-in web portal gives you a live dashboard over the activity, bound to loopback and reached over an SSH tunnel so it leaves no management footprint on the network.
 
 The design goal is simple: **every attacker interaction is logged, automated scanners are frustrated, and human operators are kept engaged long enough to reveal their tooling, payloads, and command-and-control infrastructure.**
 
-SweeTTY is built from scratch in Go and kept deliberately dependency-light. The protocol emulations, the fake shell (including the telnet/IAC layer), and the virtual filesystem are implemented directly against the standard library, so the honeypot owns the exact bytes on the wire. Only a few well-scoped libraries are pulled in where they clearly earn their place, such as [Gin](https://github.com/gin-gonic/gin) for the management portal. The authoritative dependency list is [`go.mod`](./go.mod).
+SweeTTY is built from scratch in Go and kept deliberately dependency-light. The protocol emulations, the fake shell (including the telnet/IAC layer), the virtual filesystem, and the management portal are implemented directly against the standard library, so the honeypot owns the exact bytes on the wire and the binary stays small and auditable. The only non-stdlib dependency is `golang.org/x/crypto` for the SSH server handshake. The authoritative dependency list is [`go.mod`](./go.mod).
 
 > ### 🚀 Want to deploy this?
 > This repo is the **product**. To stand up a real, hardened sensor — HAProxy edge, blue/green releases, firewall, network isolation, randomized management port, and step-by-step setup written for both humans and AI agents — use the companion repo:
@@ -304,7 +304,7 @@ sweetty/
     ├── server/          TCP listeners, sessions, IO helpers, the Protocol interface
     ├── shell/           The fake interactive shell: parsing, dispatch, fake editor
     ├── proto/           One package per service (telnet, ssh, http, https, ftp)
-    └── portal/          The Gin management portal (dashboard, SSE, log API)
+    └── portal/          The net/http management portal (dashboard, SSE, log API)
 ```
 
 ## Adding a protocol
