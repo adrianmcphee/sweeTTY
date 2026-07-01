@@ -270,6 +270,15 @@ func TestDashboardHasStatScopeToggle(t *testing.T) {
 	}
 }
 
+// TestDashboardRefreshesCardsOnNotableEvent proves a notable feed event (a JT
+// reveal or a payload pull) triggers a prompt stat-card refresh, so the counter
+// ticks up in step with the confetti rather than lagging on the slow poll timer.
+func TestDashboardRefreshesCardsOnNotableEvent(t *testing.T) {
+	if !strings.Contains(dashboardHTML, "NOTABLE[e.event])scheduleOverview()") {
+		t.Error("a notable feed event does not trigger a prompt stat-card refresh")
+	}
+}
+
 // TestDashboardFlashesJTOnReveal checks the honeytoken celebration flash is wired:
 // the overlay markup, styles, and trigger exist, and flashJT is invoked only from
 // prizeMoment (which fires solely on a HONEYTOKEN, a JT reveal), never elsewhere.

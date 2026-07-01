@@ -425,7 +425,11 @@ computeStats();
 sparkBump();
 notify(e);
 bumpUnseen();
-if(curView==='sources'||curView==='recon')scheduleOverview();
+// The stat cards are the server-side whole-day rollup, normally refreshed on a
+// slow timer. A notable event (a JT reveal, a payload pull) is rare and high-signal,
+// so refresh promptly on it too, keeping the cards in step with the confetti/flash
+// instead of lagging up to the poll interval. High-volume events stay on the timer.
+if(curView==='sources'||curView==='recon'||NOTABLE[e.event])scheduleOverview();
 if(curView==='honeytokens'&&e.event==='HONEYTOKEN')loadHoneytokens();
 if(curView==='payloads'&&e.event==='DOWNLOAD_ATTEMPT')loadPayloads();
 if(e.event==='SESSION_END')loadRecordings();
