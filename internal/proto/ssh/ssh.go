@@ -50,6 +50,24 @@ const tarpitHold = 5 * time.Minute
 // attempt is still captured).
 const maxAuthTries = 6
 
+// handshakeTimeout bounds the SSH transport handshake and authentication. The
+// interactive path runs the handshake on the bare TCP conn, which has no per-read
+// deadline of its own, so without this a client that opens the socket and then
+// dribbles or sends nothing pins a goroutine, an fd, and a connection-limiter slot
+// forever. Held long enough that a slow-but-real client still completes. A var,
+// not a const, only so a test can shorten it.
+var handshakeTimeout = 30 * time.Second
+
+// sessionDeadline is the absolute ceiling on one interactive SSH connection once
+// the handshake is done, mirroring the line protocols' session-lifetime clamp. It
+// stops a client that completes auth but never opens a channel, or opens a channel
+// but never requests a shell, from stalling a goroutine indefinitely.
+const sessionDeadline = 60 * time.Minute
+
+// startTimeout bounds how long an accepted channel waits for its first shell or
+// exec request before the session is abandoned.
+const startTimeout = 2 * time.Minute
+
 // errAuthFailed is the generic rejection returned to every failed auth attempt, so
 // the client cannot distinguish a wrong password from an unknown user.
 var errAuthFailed = errors.New("permission denied")
@@ -119,13 +137,22 @@ func (pr *Protocol) Handle(s *server.Session) {
 	}
 	cfg.AddHostKey(signer)
 
-	sshConn, chans, reqs, err := gossh.NewServerConn(s.RawConn(), cfg)
+	// Deadline the handshake on the bare conn: gossh reads the client banner and
+	// runs key exchange here with no read deadline of its own, so an idle or
+	// dribbling client would otherwise pin this goroutine forever.
+	raw := s.RawConn()
+	raw.SetDeadline(time.Now().Add(handshakeTimeout))
+	sshConn, chans, reqs, err := gossh.NewServerConn(raw, cfg)
 	if err != nil {
 		// Handshake closed or every auth attempt failed. Credentials are already
 		// logged in the callbacks; the library has closed the connection.
 		return
 	}
 	defer sshConn.Close()
+	// Handshake done: swap the tight handshake deadline for the absolute session
+	// ceiling, so a completed connection that then goes idle (no channel, no shell
+	// request) still cannot hold the goroutine and slot open without bound.
+	raw.SetDeadline(time.Now().Add(sessionDeadline))
 	s.Username = sshConn.User()
 
 	go gossh.DiscardRequests(reqs)
@@ -179,6 +206,14 @@ func (pr *Protocol) serveSession(s *server.Session, nc gossh.NewChannel) {
 	start := make(chan startReq, 1)
 	go func() {
 		defer close(start)
+		// This goroutine parses attacker-controlled channel-request payloads. A panic
+		// in a bare goroutine is not caught by the parent's recover and would crash the
+		// whole multi-port process, so guard it the way every other input handler is.
+		defer func() {
+			if r := recover(); r != nil {
+				s.LogRaw("SSH_NOTE", "recovered from a panic in the channel-request handler")
+			}
+		}()
 		var pty, started bool
 		for req := range reqs {
 			switch req.Type {
@@ -219,9 +254,17 @@ func (pr *Protocol) serveSession(s *server.Session, nc gossh.NewChannel) {
 		}
 	}()
 
-	sr, ok := <-start
-	if !ok {
-		// The client closed the channel without ever asking for a shell or a command.
+	var sr startReq
+	var ok bool
+	select {
+	case sr, ok = <-start:
+		if !ok {
+			// The client closed the channel without ever asking for a shell or command.
+			return
+		}
+	case <-time.After(startTimeout):
+		// Channel accepted but no shell/exec request ever arrived: abandon it rather
+		// than block this goroutine on the range over reqs indefinitely.
 		return
 	}
 
