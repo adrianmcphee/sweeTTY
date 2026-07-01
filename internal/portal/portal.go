@@ -7,6 +7,7 @@
 package portal
 
 import (
+	_ "embed"
 	"net"
 	"net/http"
 	"time"
@@ -17,6 +18,13 @@ import (
 	"sweetty/internal/event"
 	"sweetty/internal/geo"
 )
+
+// jtPrizeJPG is the celebratory portrait flashed in the console when a honeytoken
+// is tripped (a JT reveal). It is embedded and served same-origin, so the console
+// still references nothing off-host.
+//
+//go:embed jt-prize.jpg
+var jtPrizeJPG []byte
 
 // maxConcurrentSSE bounds live event-stream subscribers so they cannot exhaust
 // file descriptors and goroutines.
@@ -117,6 +125,14 @@ func (p *Portal) dashRoutes(dash *gin.RouterGroup) {
 	dash.GET("/session/:id", p.bySession)
 	dash.GET("/recordings", p.recordings)
 	dash.GET("/cast/:id", p.cast)
+	dash.GET("/jt-prize.jpg", p.jtPrize)
+}
+
+// jtPrize serves the embedded celebration portrait for the honeytoken flash. It is
+// static and cacheable, and reaches nothing off-host.
+func (p *Portal) jtPrize(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Data(http.StatusOK, "image/jpeg", jtPrizeJPG)
 }
 
 // addr renders the portal bind address. The default bind is loopback, so the

@@ -270,6 +270,47 @@ func TestDashboardHasStatScopeToggle(t *testing.T) {
 	}
 }
 
+// TestDashboardFlashesJTOnReveal checks the honeytoken celebration flash is wired:
+// the overlay markup, styles, and trigger exist, and flashJT is invoked only from
+// prizeMoment (which fires solely on a HONEYTOKEN, a JT reveal), never elsewhere.
+func TestDashboardFlashesJTOnReveal(t *testing.T) {
+	for _, want := range []string{
+		`id="jtflash"`,
+		`src="/dashboard/jt-prize.jpg"`,
+		"function flashJT",
+		"#jtflash.on{",
+		"@keyframes jtflash",
+		"flashJT();",
+	} {
+		if !strings.Contains(dashboardHTML, want) {
+			t.Errorf("dashboard page missing the JT-flash hook %q", want)
+		}
+	}
+	// The only call site is inside prizeMoment, so it cannot fire on a generic event.
+	if strings.Count(dashboardHTML, "flashJT();") != 1 {
+		t.Errorf("flashJT() should be called exactly once (from prizeMoment); found %d", strings.Count(dashboardHTML, "flashJT();"))
+	}
+}
+
+// TestJTPrizeImageServed proves the embedded celebration portrait is served as a
+// same-origin JPEG, so the console references nothing off-host.
+func TestJTPrizeImageServed(t *testing.T) {
+	p := newTestPortal(t)
+	eng := p.engine()
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/jt-prize.jpg", nil)
+	w := httptest.NewRecorder()
+	eng.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "image/jpeg") {
+		t.Errorf("content-type = %q, want image/jpeg", ct)
+	}
+	if b := w.Body.Bytes(); len(b) < 1000 || b[0] != 0xFF || b[1] != 0xD8 {
+		t.Errorf("served bytes are not a valid embedded JPEG (%d bytes)", len(b))
+	}
+}
+
 // TestDashboardRendersAssessmentPanel checks the per-IP drawer wires the profile
 // into an assessment panel: the builders, the styles, and the threading of the
 // byIP response's profile into renderDetail.

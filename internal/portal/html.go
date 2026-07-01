@@ -206,6 +206,10 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 
 #confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:85;display:none}
 #confetti.on{display:block}
+#jtflash{position:fixed;inset:0;z-index:87;display:none;align-items:center;justify-content:center;pointer-events:none;background:rgba(0,0,0,.4)}
+#jtflash.on{display:flex;animation:jtflash 2.8s cubic-bezier(.2,.7,.3,1) forwards}
+#jtflash img{max-width:min(68vw,480px);max-height:76vh;border-radius:16px;border:3px solid #fbbf24;box-shadow:0 16px 70px rgba(0,0,0,.75),0 0 44px rgba(251,191,36,.35)}
+@keyframes jtflash{0%{opacity:0;transform:scale(.82) rotate(-3deg)}12%{opacity:1;transform:scale(1) rotate(0)}80%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(1.03)}}
 
 @media(max-width:1100px){#app{grid-template-columns:64px 1fr}.brand .bt,.brand .bs,.navitem .grow,.navbadge,.navsec,.logoutbtn span:not([data-icon]){display:none}.navitem,.logoutbtn{justify-content:center;gap:0}.recon{grid-template-columns:1fr}}
 </style></head>
@@ -312,6 +316,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 
 <div id="toasts"></div>
 <canvas id="confetti"></canvas>
+<div id="jtflash"><img src="/dashboard/jt-prize.jpg" alt=""></div>
 
 <script>
 var ICONS={
@@ -967,7 +972,20 @@ function prizeMoment(e){
 var line=PRIZE_LINES[prizeIdx%PRIZE_LINES.length];prizeIdx++;
 toast({prize:true,icon:'star',title:'⭐ ULTIMATE PRIZE',body:line+'  '+srcOf(e),ip:srcOf(e)});
 burstConfetti();
+flashJT();
 playPrize();
+}
+// flashJT flashes the celebration portrait full-screen for ~2s then fades it out,
+// riding the same honeytoken (JT reveal) trigger as the confetti. Only prizeMoment,
+// which fires solely on a HONEYTOKEN, calls it, so it never appears on other events.
+var jtFlashEl=document.getElementById('jtflash'),jtFlashT=0;
+function flashJT(){
+if(!jtFlashEl)return;
+jtFlashEl.classList.remove('on');
+void jtFlashEl.offsetWidth; // restart the animation if a second reveal fires quickly
+jtFlashEl.classList.add('on');
+if(jtFlashT)clearTimeout(jtFlashT);
+jtFlashT=setTimeout(function(){jtFlashEl.classList.remove('on');jtFlashT=0;},2800);
 }
 
 // --- audio (opt-in, synthesized, no assets) -------------------------------
