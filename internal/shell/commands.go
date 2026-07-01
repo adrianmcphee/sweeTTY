@@ -145,6 +145,34 @@ func parentPath(abs string) string {
 // whole process. A real attacker never needs more than this from one command.
 const maxCmdOutput = 4 << 20
 
+// procDynamic returns synthesized content for the handful of /proc files that must
+// stay live and coherent with the rest of the persona, rather than being frozen
+// embedded text. /proc/uptime in particular must derive from the boot epoch (so it
+// agrees with `uptime`) and carry an idle time consistent with the CPU count (a
+// static idle/uptime ratio silently implies the wrong number of cores). It returns
+// false for any path it does not synthesize, so the caller falls back to the VFS.
+func (sh *Shell) procDynamic(abs string) (string, bool) {
+	switch abs {
+	case "/proc/uptime":
+		up := uptimeOf(sh.p).Seconds()
+		// Idle is summed across cores: on a 2-core box (matching lscpu, nproc, and
+		// /proc/cpuinfo) roughly 2 x uptime, less the small fraction actually spent busy.
+		idle := up * 2 * 0.985
+		return fmt.Sprintf("%.2f %.2f\n", up, idle), true
+	}
+	return "", false
+}
+
+// readFile reads a path for display, consulting the dynamic /proc synthesizer first
+// so cat, head, tail, and grep all read the same live content, then falling back to
+// the virtual filesystem.
+func (sh *Shell) readFile(abs string) ([]byte, error) {
+	if dyn, ok := sh.procDynamic(abs); ok {
+		return []byte(dyn), nil
+	}
+	return sh.fs.ReadFile(abs)
+}
+
 func (sh *Shell) cmdCat(args []string) (string, int) {
 	var files []string
 	for _, a := range args[1:] {
@@ -182,6 +210,13 @@ func (sh *Shell) cmdCat(args []string) (string, int) {
 			// catting a bait image dumps the colour-ANSI reveal straight to the
 			// terminal — the payoff for whoever followed the trail to the stash.
 			b.WriteString(sh.revealForLoot("loot-view", abs, "cat "+f))
+			continue
+		}
+		if dyn, ok := sh.procDynamic(abs); ok {
+			if room := maxCmdOutput - b.Len(); len(dyn) > room {
+				dyn = dyn[:room]
+			}
+			b.WriteString(dyn)
 			continue
 		}
 		content := n.Content()
@@ -404,7 +439,7 @@ func (sh *Shell) cmdHeadTail(args []string, stdin string, tail bool) (string, in
 	}
 	data := stdin
 	if file != "" {
-		b, err := sh.fs.ReadFile(sh.fs.Resolve(file))
+		b, err := sh.readFile(sh.fs.Resolve(file))
 		if err != nil {
 			verb := "head"
 			if tail {
@@ -468,7 +503,7 @@ func (sh *Shell) cmdWc(args []string, stdin string) (string, int) {
 	}
 	data := stdin
 	if file != "" {
-		b, err := sh.fs.ReadFile(sh.fs.Resolve(file))
+		b, err := sh.readFile(sh.fs.Resolve(file))
 		if err != nil {
 			return "wc: " + file + ": No such file or directory\n", 1
 		}
@@ -508,7 +543,7 @@ func (sh *Shell) cmdGrep(args []string, stdin string) (string, int) {
 	}
 	data := stdin
 	if file != "" {
-		b, err := sh.fs.ReadFile(sh.fs.Resolve(file))
+		b, err := sh.readFile(sh.fs.Resolve(file))
 		if err != nil {
 			return "grep: " + file + ": No such file or directory\n", 2
 		}

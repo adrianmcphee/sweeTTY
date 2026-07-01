@@ -167,7 +167,7 @@ func TestProcessStartCoherentWithUptime(t *testing.T) {
 	p, _ := loadHost(t)
 	bootDate := time.Unix(p.BootEpoch, 0).Format("Jan02")
 
-	ps := psStr(p, true)
+	ps := psStr(p, true, time.Now())
 	// init (PID 1) is the canonical boot daemon; its START must be the boot date.
 	initLine := ""
 	for _, line := range strings.Split(ps, "\n") {
@@ -192,7 +192,7 @@ func TestProcessStartCoherentWithUptime(t *testing.T) {
 // nginx has caught the box.
 func TestSystemctlMainPidMatchesPs(t *testing.T) {
 	p, _ := loadHost(t)
-	ps := psStr(p, true)
+	ps := psStr(p, true, time.Now())
 	pidRe := regexp.MustCompile(`Main PID:\s*(\d+)`)
 	for _, svc := range []string{"nginx", "mysql", "ssh"} {
 		status := systemctlStatus(p, svc)

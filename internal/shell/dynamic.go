@@ -32,7 +32,7 @@ func (sh *Shell) cmdPs(args []string) string {
 			full = true
 		}
 	}
-	return psStr(sh.p, full)
+	return psStr(sh.p, full, sh.login)
 }
 
 // procRow is one line of the synthetic process table that backs both `ps aux` and
@@ -76,9 +76,11 @@ func procTable(p *persona.Persona) []procRow {
 // date (e.g. Jun01) when the box booted before today, or HH:MM if it booted today;
 // a session process shows a recent HH:MM. This is what keeps ps from contradicting
 // uptime.
-func psStartField(p *persona.Persona, atBoot bool) string {
+func psStartField(p *persona.Persona, atBoot bool, login time.Time) string {
 	if !atBoot {
-		return time.Now().Add(-8 * time.Minute).Format("15:04")
+		// A session process (the attacker's shell and ps) started when the session
+		// logged in, so its START agrees with w/who/last rather than a fixed offset.
+		return login.Format("15:04")
 	}
 	boot := time.Unix(p.BootEpoch, 0)
 	if time.Since(boot) < 24*time.Hour {
@@ -87,7 +89,7 @@ func psStartField(p *persona.Persona, atBoot bool) string {
 	return boot.Format("Jan02")
 }
 
-func psStr(p *persona.Persona, full bool) string {
+func psStr(p *persona.Persona, full bool, login time.Time) string {
 	if !full {
 		return "    PID TTY          TIME CMD\n   2841 pts/0    00:00:00 bash\n   2899 pts/0    00:00:00 ps\n"
 	}
@@ -96,7 +98,7 @@ func psStr(p *persona.Persona, full bool) string {
 	for _, r := range procTable(p) {
 		fmt.Fprintf(&b, "%-8s %5d %4s %4s %6d %5d %-8s %-4s %-5s %s %s\n",
 			r.user, r.pid, r.cpu, r.mem, r.vsz, r.rss, r.tty, r.stat,
-			psStartField(p, r.atBoot), r.cpuTime, r.command)
+			psStartField(p, r.atBoot, login), r.cpuTime, r.command)
 	}
 	return b.String()
 }
@@ -187,13 +189,32 @@ func uptimeStr(p *persona.Persona) string {
 		time.Now().Format("15:04:05"), days, hh, mm, 8+days%30, 12+days%20, 5+days%15)
 }
 
-func wStr(p *persona.Persona, user string) string {
+// wStr renders `w` with the live session shown as itself: logged in from the real
+// attacker source at the moment it connected, so a source that connects and
+// immediately runs `w` sees its own address and a near-zero idle time rather than
+// a fabricated past login from the gateway (the classic just-connected tell).
+func wStr(p *persona.Persona, user, srcIP string, login time.Time) string {
+	idle := idleField(login)
 	return strings.TrimSuffix(uptimeStr(p), "\n") +
 		"\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT\n" +
-		fmt.Sprintf("%-8s pts/0    %-15s %s    0.00s  0.04s  0.00s -bash\n", user, p.GatewayIP, time.Now().Add(-23*time.Minute).Format("15:04"))
+		fmt.Sprintf("%-8s pts/0    %-15s %s    %s  0.04s  0.00s -bash\n", user, srcIP, login.Format("15:04"), idle)
 }
 
-func lastStr(p *persona.Persona, user string) string {
+// idleField formats the w IDLE column from how long ago the session logged in,
+// so it advances with real elapsed time instead of being a constant.
+func idleField(login time.Time) string {
+	s := int(time.Since(login).Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%2d.00s", s)
+	}
+	m := s / 60
+	if m < 60 {
+		return fmt.Sprintf("%5dm", m)
+	}
+	return fmt.Sprintf("%2d:%02d", m/60, m%60)
+}
+
+func lastStr(p *persona.Persona, user, srcIP string, login time.Time) string {
 	now := time.Now()
 	return fmt.Sprintf(`%-8s pts/0        %-15s %s   still logged in
 %-8s pts/0        %-15s %s - %s  (00:42)
@@ -202,7 +223,7 @@ deploy   pts/1        %-15s %s - %s  (00:09)
 
 wtmp begins %s
 `,
-		user, p.GatewayIP, now.Add(-23*time.Minute).Format("Mon Jan _2 15:04"),
+		user, srcIP, login.Format("Mon Jan _2 15:04"),
 		user, p.GatewayIP, now.Add(-26*time.Hour).Format("Mon Jan _2 15:04"), now.Add(-26*time.Hour).Add(42*time.Minute).Format("15:04"),
 		user, p.GatewayIP, now.Add(-50*time.Hour).Format("Mon Jan _2 15:04"), now.Add(-50*time.Hour).Add(78*time.Minute).Format("15:04"),
 		p.BackupIP, now.Add(-74*time.Hour).Format("Mon Jan _2 15:04"), now.Add(-74*time.Hour).Add(9*time.Minute).Format("15:04"),

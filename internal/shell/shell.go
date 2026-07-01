@@ -39,8 +39,9 @@ type Shell struct {
 	last      int
 	quit      bool
 	pivot     PivotResolver
-	execDepth int    // re-entry depth for sh -c / base64-decoded commands
-	cron      string // crontab installed this session, so crontab -l echoes what -e/<file> set
+	execDepth int       // re-entry depth for sh -c / base64-decoded commands
+	cron      string    // crontab installed this session, so crontab -l echoes what -e/<file> set
+	login     time.Time // when this session logged in, so w/who/last/ps show it live from the real source
 	// capture, when non-nil, receives command output instead of the terminal, so
 	// $(...) and backticks can run a sub-command and read back its stdout.
 	capture *strings.Builder
@@ -131,6 +132,7 @@ func newShell(s *server.Session, base *vfs.FS, p *persona.Persona, user, style s
 		s: s, fs: base.NewSession(home), p: p, user: user, style: style,
 		env: defaultEnv(p, user, home), pivot: pivot,
 		expandBudget: maxExpandBytes,
+		login:        time.Now(),
 	}
 }
 
@@ -697,11 +699,11 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 	case "uptime":
 		return uptimeStr(sh.p), 0
 	case "w":
-		return wStr(sh.p, sh.user), 0
+		return wStr(sh.p, sh.user, sh.s.SrcIP, sh.login), 0
 	case "who":
-		return sh.user + "     pts/0        " + time.Now().Format("Jan _2 15:04") + " (" + sh.p.GatewayIP + ")\n", 0
+		return sh.user + "     pts/0        " + sh.login.Format("Jan _2 15:04") + " (" + sh.s.SrcIP + ")\n", 0
 	case "last":
-		return lastStr(sh.p, sh.user), 0
+		return lastStr(sh.p, sh.user, sh.s.SrcIP, sh.login), 0
 	case "date":
 		return time.Now().Format("Mon Jan  2 15:04:05 MST 2006") + "\n", 0
 	case "ifconfig":
