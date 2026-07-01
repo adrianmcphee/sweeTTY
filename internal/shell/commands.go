@@ -159,6 +159,21 @@ func (sh *Shell) procDynamic(abs string) (string, bool) {
 		// /proc/cpuinfo) roughly 2 x uptime, less the small fraction actually spent busy.
 		idle := up * 2 * 0.985
 		return fmt.Sprintf("%.2f %.2f\n", up, idle), true
+	case "/proc/meminfo":
+		// Render from the same numbers free and top use, so the three agree on
+		// MemTotal/MemFree/MemAvailable and the swap figures rather than contradicting.
+		total, _, free, buff, avail := memNumbers(sh.p)
+		buffers := 121680
+		cached := buff - buffers
+		return fmt.Sprintf(`MemTotal:       %8d kB
+MemFree:        %8d kB
+MemAvailable:   %8d kB
+Buffers:        %8d kB
+Cached:         %8d kB
+SwapCached:            0 kB
+SwapTotal:      %8d kB
+SwapFree:       %8d kB
+`, total, free, avail, buffers, cached, swapTotalKiB, swapFreeKiB), true
 	}
 	return "", false
 }

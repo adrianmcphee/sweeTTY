@@ -54,22 +54,59 @@ type procRow struct {
 	command string
 }
 
+// shellPID is the pid of the session's own -bash, referenced both by ps (the -bash
+// row) and by `echo $$`, so the two agree.
+const shellPID = 2841
+
 // procTable is the single source of truth for the running processes. The daemon
 // PIDs are fixed per build (a real box's are stable across a session too), and the
 // master/worker split matters: systemd's "Main PID" is the master row.
 func procTable(p *persona.Persona) []procRow {
-	return []procRow{
+	rows := []procRow{
 		{"root", 1, "0.0", "0.4", 168140, 11200, "?", "Ss", true, "0:24", "/sbin/init"},
-		{"root", 412, "0.0", "0.2", 93776, 6020, "?", "Ss", true, "0:01", "/lib/systemd/systemd-journald"},
-		{"root", 498, "0.0", "0.1", 15852, 4800, "?", "Ss", true, "0:00", "/usr/sbin/sshd -D"},
-		{"mysql", 611, "0.3", "9.1", 1820400, 184220, "?", "Ssl", true, "8:42", "/usr/sbin/mysqld"},
-		{"root", 719, "0.0", "0.5", 208880, 11400, "?", "Ss", true, "0:00", "nginx: master process"},
-		{"www-data", 720, "0.0", "1.2", 209360, 25240, "?", "S", true, "0:11", "nginx: worker process"},
-		{"www-data", 721, "0.0", "1.2", 209360, 24980, "?", "S", true, "0:09", "nginx: worker process"},
-		{"www-data", 880, "0.0", "2.1", 294500, 43120, "?", "S", true, "0:33", "php-fpm: pool www"},
-		{"root", 2841, "0.0", "0.2", 21380, 5360, "pts/0", "Ss", false, "0:00", "-bash"},
-		{"root", 2900, "0.0", "0.1", 19208, 3600, "pts/0", "R+", false, "0:00", "ps aux"},
 	}
+	// Kernel threads: bracketed names, zero VSZ/RSS the way real kernel threads show
+	// in ps. Their absence (a userspace-only listing) is a classic honeypot tell.
+	kthreads := []string{
+		"[kthreadd]", "[rcu_gp]", "[rcu_par_gp]", "[kworker/0:0H-events_highpri]", "[mm_percpu_wq]",
+		"[ksoftirqd/0]", "[rcu_sched]", "[migration/0]", "[cpuhp/0]", "[cpuhp/1]", "[migration/1]",
+		"[ksoftirqd/1]", "[kworker/1:0H-events_highpri]", "[kdevtmpfs]", "[netns]", "[kauditd]",
+		"[khungtaskd]", "[oom_reaper]", "[writeback]", "[kcompactd0]", "[ksmd]", "[khugepaged]",
+		"[kintegrityd]", "[kblockd]", "[ata_sff]", "[md]", "[edac-poller]", "[devfreq_wq]",
+		"[watchdogd]", "[kswapd0]", "[kthrotld]", "[ipv6_addrconf]", "[kstrp]", "[jbd2/xvda1-8]",
+		"[ext4-rsv-conver]", "[kworker/0:2-events]", "[kworker/1:2-events]", "[kworker/u4:1-flush-202:0]",
+	}
+	pid := 2
+	for _, name := range kthreads {
+		stat := "I<"
+		if strings.HasPrefix(name, "[ksoftirqd") || strings.HasPrefix(name, "[migration") || strings.HasPrefix(name, "[rcu_sched") {
+			stat = "S"
+		}
+		rows = append(rows, procRow{"root", pid, "0.0", "0.0", 0, 0, "?", stat, true, "0:00", name})
+		pid += 2
+	}
+	// Standard system daemons a real Ubuntu server always runs, so the listing is not
+	// a suspiciously clean LAMP-only set.
+	rows = append(rows,
+		procRow{"root", 412, "0.0", "0.2", 93776, 6020, "?", "Ss", true, "0:01", "/lib/systemd/systemd-journald"},
+		procRow{"root", 440, "0.0", "0.2", 25004, 6600, "?", "Ss", true, "0:00", "/lib/systemd/systemd-udevd"},
+		procRow{"systemd+", 520, "0.0", "0.2", 90120, 5900, "?", "Ssl", true, "0:02", "/lib/systemd/systemd-networkd"},
+		procRow{"systemd+", 522, "0.0", "0.3", 25376, 12100, "?", "Ss", true, "0:03", "/lib/systemd/systemd-resolved"},
+		procRow{"root", 540, "0.0", "0.1", 8892, 3200, "?", "Ss", true, "0:00", "/usr/sbin/cron -f"},
+		procRow{"message+", 544, "0.0", "0.1", 9160, 4800, "?", "Ss", true, "0:01", "/usr/bin/dbus-daemon --system --address=systemd: --nofork --nopidfile"},
+		procRow{"root", 560, "0.0", "0.2", 16948, 7400, "?", "Ss", true, "0:00", "/lib/systemd/systemd-logind"},
+		procRow{"syslog", 566, "0.0", "0.1", 222440, 5000, "?", "Ssl", true, "0:00", "/usr/sbin/rsyslogd -n -iNONE"},
+		procRow{"root", 498, "0.0", "0.1", 15852, 4800, "?", "Ss", true, "0:00", "/usr/sbin/sshd -D"},
+		procRow{"mysql", 611, "0.3", "9.1", 1820400, 184220, "?", "Ssl", true, "8:42", "/usr/sbin/mysqld"},
+		procRow{"root", 719, "0.0", "0.5", 208880, 11400, "?", "Ss", true, "0:00", "nginx: master process"},
+		procRow{"www-data", 720, "0.0", "1.2", 209360, 25240, "?", "S", true, "0:11", "nginx: worker process"},
+		procRow{"www-data", 721, "0.0", "1.2", 209360, 24980, "?", "S", true, "0:09", "nginx: worker process"},
+		procRow{"www-data", 880, "0.0", "2.1", 294500, 43120, "?", "S", true, "0:33", "php-fpm: pool www"},
+		procRow{"root", 1408, "0.0", "0.1", 5828, 1900, "tty1", "Ss+", true, "0:00", "/sbin/agetty -o -p -- \\u --noclear tty1 linux"},
+		procRow{"root", shellPID, "0.0", "0.2", 21380, 5360, "pts/0", "Ss", false, "0:00", "-bash"},
+		procRow{"root", 2900, "0.0", "0.1", 19208, 3600, "pts/0", "R+", false, "0:00", "ps aux"},
+	)
+	return rows
 }
 
 // psStartField formats the ps START column for a row: a boot daemon shows the boot
@@ -103,16 +140,31 @@ func psStr(p *persona.Persona, full bool, login time.Time) string {
 	return b.String()
 }
 
+// Swap totals, shared so free, top, and /proc/meminfo never disagree on them.
+const (
+	swapTotalKiB = 2097148
+	swapUsedKiB  = 86040
+	swapFreeKiB  = swapTotalKiB - swapUsedKiB
+)
+
+// memNumbers is the single source of truth for RAM figures, in KiB, so free, top,
+// and /proc/meminfo all render from one set and can never contradict each other.
+// The used figure drifts with uptime so repeated calls differ the way a live box's do.
+func memNumbers(p *persona.Persona) (total, used, free, buff, avail int) {
+	total = 4030836
+	used = 1740000 + int(uptimeOf(p).Minutes())%90000
+	free = 240000
+	buff = total - used - free
+	avail = total - used + 600000
+	return
+}
+
 func freeStr(p *persona.Persona) string {
-	total := 4030836
-	used := 1740000 + int(uptimeOf(p).Minutes())%90000
-	free := 240000
-	buff := total - used - free
-	avail := total - used + 600000
+	total, used, free, buff, avail := memNumbers(p)
 	return fmt.Sprintf(`               total        used        free      shared  buff/cache   available
 Mem:        %8d    %8d    %8d      199116    %8d    %8d
-Swap:        2097148       86040     2011108
-`, total, used, free, buff, avail)
+Swap:     %10d  %10d  %10d
+`, total, used, free, buff, avail, swapTotalKiB, swapUsedKiB, swapFreeKiB)
 }
 
 // diskSize pairs the size lsblk prints for a device with the 1K-block count its

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	mrand "math/rand/v2"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -230,23 +231,27 @@ func (sh *Shell) iWget(args []string) int {
 	if file == "-" {
 		toStdout = true
 	}
+	ip := fakeResolveIP(host)
+	size := fakeDownloadSize(url)
+	dur := downloadDur(size)
 	sh.s.LogDownload(strings.Join(args, " "), url, host, file)
 	sh.s.Writeln("--" + time.Now().Format("2006-01-02 15:04:05") + "--  " + url)
-	sh.s.Writeln("Resolving " + host + " (" + host + ")... 203.0.113.42")
-	sh.s.Writeln("Connecting to " + host + " (" + host + ")|203.0.113.42|:80... connected.")
+	sh.s.Writeln("Resolving " + host + " (" + host + ")... " + ip)
+	sh.s.Writeln("Connecting to " + host + " (" + host + ")|" + ip + "|:80... connected.")
 	sh.s.Writeln("HTTP request sent, awaiting response... 200 OK")
-	sh.s.Writeln("Length: 87429 (85K) [application/octet-stream]")
+	sh.s.Writeln(fmt.Sprintf("Length: %d (%s) [application/octet-stream]", size, humanBytes(size)))
 	if toStdout {
 		// Output "goes to stdout"; in a pipe the next stage consumes it. We emit
 		// nothing and never connect — the download intent is already captured.
-		sh.pause(2 * time.Second)
+		sh.pause(dur)
 		return 0
 	}
 	sh.s.Writeln("Saving to: '" + file + "'")
 	sh.s.Writeln("")
-	sh.s.SlowProgress(file+"  85K", 3*time.Minute)
+	sh.s.SlowProgress(file+"  "+humanBytes(size), dur)
 	sh.s.Writeln("")
-	sh.s.Writeln(time.Now().Format("2006-01-02 15:04:05") + " (1.41 MB/s) - '" + file + "' saved [87429/87429]")
+	sh.s.Writeln(fmt.Sprintf("%s (%s) - '%s' saved [%d/%d]",
+		time.Now().Format("2006-01-02 15:04:05"), downloadRate(size, dur), file, size, size))
 	// The fetch "succeeds": an inert payload lands in the overlay so the file
 	// survives ls/cat/file and a follow-up chmod +x && ./run (captured as exec).
 	// Nothing was actually fetched; no outbound connection is ever made.
@@ -277,8 +282,11 @@ func (sh *Shell) iCurl(args []string) int {
 		if name == "" || name == "." || name == "/" {
 			name = "index.html"
 		}
-		sh.s.SlowProgress("  % Total    % Received % Xferd  Average Speed", 3*time.Minute)
-		sh.s.Writeln("100 87429  100 87429    0     0  1180k      0 --:--:-- --:--:-- --:--:-- 1190k")
+		size := fakeDownloadSize(url)
+		dur := downloadDur(size)
+		sh.s.SlowProgress("  % Total    % Received % Xferd  Average Speed", dur)
+		sh.s.Writeln(fmt.Sprintf("100 %d  100 %d    0     0  %dk      0 --:--:-- --:--:-- --:--:-- %dk",
+			size, size, size/1024, size/1024))
 		// Lands like wget: an inert payload in the overlay, no outbound connection.
 		_ = sh.fs.WriteFile(sh.fs.Resolve(name), droppedPayload(name))
 		return 0
@@ -443,7 +451,100 @@ func (sh *Shell) iShExec(args []string) int {
 	return 0
 }
 
+// fakeResolveIP returns a stable, plausible routable IP for a host, derived from
+// its name so the same host always resolves the same way and different hosts differ.
+// It stays out of the reserved ranges a real resolver never returns for an internet
+// host: resolving an attacker's own C2 to a TEST-NET address is an obvious tell.
+func fakeResolveIP(host string) string {
+	h := fnv32(host)
+	firsts := []int{45, 104, 138, 159, 172, 185, 193, 194} // common hosting first octets
+	return fmt.Sprintf("%d.%d.%d.%d",
+		firsts[int(h)%len(firsts)], int(h>>8)%256, int(h>>16)%256, int(h>>24)%254+1)
+}
+
+// fakeDownloadSize returns a stable, plausible payload size for a URL, so two
+// fetches are never byte-identical and the size varies with what is being pulled.
+func fakeDownloadSize(url string) int { return 24000 + int(fnv32(url)%940000) }
+
+// downloadDur is how long the fake transfer appears to take: proportional to size
+// but short and capped, because a small file that stalls for minutes while claiming
+// a fast rate is itself the tell (a real 85K fetch is near-instant).
+func downloadDur(size int) time.Duration {
+	d := time.Duration(size/400000) * time.Second
+	if d < 300*time.Millisecond {
+		d = 300 * time.Millisecond
+	}
+	if d > 5*time.Second {
+		d = 5 * time.Second
+	}
+	return d
+}
+
+// downloadRate reports a transfer rate consistent with the size and duration shown,
+// so the reported speed cannot contradict the elapsed time.
+func downloadRate(size int, d time.Duration) string {
+	bps := float64(size) / d.Seconds()
+	if bps >= 1<<20 {
+		return fmt.Sprintf("%.2f MB/s", bps/(1<<20))
+	}
+	return fmt.Sprintf("%.0f KB/s", bps/1024)
+}
+
+func humanBytes(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%dK", n/1024)
+	default:
+		return strconv.Itoa(n)
+	}
+}
+
+func fnv32(s string) uint32 {
+	h := uint32(2166136261)
+	for i := 0; i < len(s); i++ {
+		h = (h ^ uint32(s[i])) * 16777619
+	}
+	return h
+}
+
+// interpVersion answers a version probe (--version / -V / -v) for a scripting
+// interpreter with a real jammy version string, so `python3 --version` and friends
+// do not segfault the way a payload run does. A prober enumerates the toolchain in
+// the first minute; an interpreter that is "installed" yet fails even a version
+// check is a conclusive tell.
+func interpVersion(args []string) (string, bool) {
+	probe := false
+	for _, a := range args[1:] {
+		if a == "--version" || a == "-V" || a == "-v" {
+			probe = true
+		}
+	}
+	if !probe {
+		return "", false
+	}
+	switch {
+	case strings.HasPrefix(args[0], "python"):
+		return "Python 3.10.12", true
+	case args[0] == "perl":
+		return "\nThis is perl 5, version 34, subversion 0 (v5.34.0) built for x86_64-linux-gnu-thread-multi\n\n" +
+			"Copyright 1987-2022, Larry Wall\n", true
+	case args[0] == "ruby":
+		return "ruby 3.0.2p107 (2021-07-07 revision 0db68f0233) [x86_64-linux-gnu]", true
+	case args[0] == "node" || args[0] == "nodejs":
+		return "v12.22.9", true
+	case args[0] == "php":
+		return "PHP 8.1.2 (cli) (built: Feb 25 2022 16:14:04) (NTS)", true
+	}
+	return "", false
+}
+
 func (sh *Shell) iInterp(args []string) int {
+	if v, ok := interpVersion(args); ok {
+		sh.s.Writeln(v)
+		return 0
+	}
 	full := strings.Join(args, " ")
 	code := ""
 	for i := 1; i < len(args); i++ {
@@ -585,6 +686,25 @@ func looksLikeCommand(s string) bool {
 }
 
 func (sh *Shell) iCompile(args []string) int {
+	for _, a := range args[1:] {
+		if a == "--version" || a == "-dumpversion" || (a == "-v" && args[0] != "make") {
+			switch args[0] {
+			case "make":
+				sh.s.Writeln("GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.")
+			case "cc", "gcc":
+				sh.s.Writeln("gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.")
+			case "g++":
+				sh.s.Writeln("g++ (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.")
+			default:
+				sh.s.Writeln(args[0] + " (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0")
+			}
+			return 0
+		}
+		if a == "-v" && args[0] == "make" {
+			sh.s.Writeln("GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu")
+			return 0
+		}
+	}
 	sh.s.LogCommandNote(strings.Join(args, " "), "compile-attempt")
 	lines := []string{
 		"In file included from main.c:3:",
@@ -879,10 +999,21 @@ func (sh *Shell) walkFind(dir string, count *int, deadline time.Time) {
 
 func (sh *Shell) iTop(args []string) int {
 	up := uptimeOf(sh.p)
-	sh.s.Writeln(fmt.Sprintf("top - %s up %d days,  load average: 0.18, 0.22, 0.16", time.Now().Format("15:04:05"), int(up.Hours())/24))
-	sh.s.Writeln("Tasks: 112 total,   1 running, 111 sleeping,   0 stopped,   0 zombie")
+	days := int(up.Hours()) / 24
+	// Tasks and the load average must agree with what ps and uptime/w report, or the
+	// three contradict each other. Task total is the process-table length (the same
+	// list ps aux prints); load reuses uptime's formula; memory reuses free's totals.
+	total, used, free, buff, avail := memNumbers(sh.p)
+	toMiB := func(kib int) float64 { return float64(kib) / 1024 }
+	tasks := len(procTable(sh.p))
+	sh.s.Writeln(fmt.Sprintf("top - %s up %d days, %2d:%02d,  1 user,  load average: 0.%02d, 0.%02d, 0.%02d",
+		time.Now().Format("15:04:05"), days, int(up.Hours())%24, int(up.Minutes())%60,
+		8+days%30, 12+days%20, 5+days%15))
+	sh.s.Writeln(fmt.Sprintf("Tasks: %3d total,   1 running, %3d sleeping,   0 stopped,   0 zombie", tasks, tasks-1))
 	sh.s.Writeln("%Cpu(s):  2.3 us,  0.7 sy,  0.0 ni, 96.8 id,  0.2 wa,  0.0 hi,  0.0 si")
-	sh.s.Writeln("MiB Mem :   3936.0 total,    234.1 free,   1699.2 used,   2002.7 buff/cache")
+	sh.s.Writeln(fmt.Sprintf("MiB Mem : %8.1f total, %8.1f free, %8.1f used, %8.1f buff/cache",
+		toMiB(total), toMiB(free), toMiB(used), toMiB(buff)))
+	sh.s.Writeln(fmt.Sprintf("MiB Swap:   2048.0 total,   1964.0 free,     84.0 used. %8.1f avail Mem", toMiB(avail)))
 	sh.s.Writeln("")
 	sh.s.Writeln("    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND")
 	sh.s.Writeln("    611 mysql     20   0 1820400 184220  18120 S   3.0   4.6   8:42.11 mysqld")

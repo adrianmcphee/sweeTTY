@@ -367,6 +367,34 @@ func (sh *Shell) expand(w string) string {
 			b.WriteByte(c)
 			continue
 		}
+		// $$ is this shell's PID, and it must equal the -bash row ps prints for the
+		// session, or `echo $$` contradicts ps.
+		if i+1 < len(w) && w[i+1] == '$' {
+			b.WriteString(strconv.Itoa(shellPID))
+			i++
+			continue
+		}
+		// $((expr)) is arithmetic, checked before $(...) command substitution.
+		if i+2 < len(w) && w[i+1] == '(' && w[i+2] == '(' {
+			depth := 2
+			j := i + 3
+			for j < len(w) && depth > 0 {
+				switch w[j] {
+				case '(':
+					depth++
+				case ')':
+					depth--
+				}
+				if depth == 0 {
+					break
+				}
+				j++
+			}
+			// j is at the first ')' of the closing '))'; evaluate the inner expression.
+			b.WriteString(strconv.Itoa(sh.evalArith(w[i+3 : j])))
+			i = j + 1 // move past both ')'; the loop's i++ steps off the second
+			continue
+		}
 		if i+1 < len(w) && w[i+1] == '(' {
 			depth := 1
 			j := i + 2
@@ -409,6 +437,156 @@ func (sh *Shell) expand(w string) string {
 		b.WriteByte('$')
 	}
 	return b.String()
+}
+
+// cmdSleep actually pauses, because a `sleep 5` that returns instantly (so
+// `time sleep 5` shows 0s) is a plain tell. The delay is capped and interruptible
+// via pause, so it cannot be turned into a resource-holding lever by an attacker.
+func (sh *Shell) cmdSleep(args []string) string {
+	secs := 0.0
+	for _, a := range args[1:] {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		mult := 1.0
+		switch {
+		case strings.HasSuffix(a, "m"):
+			mult, a = 60, strings.TrimSuffix(a, "m")
+		case strings.HasSuffix(a, "h"):
+			mult, a = 3600, strings.TrimSuffix(a, "h")
+		case strings.HasSuffix(a, "s"):
+			a = strings.TrimSuffix(a, "s")
+		}
+		if v, err := strconv.ParseFloat(a, 64); err == nil {
+			secs += v * mult
+		}
+		break
+	}
+	if secs <= 0 {
+		return ""
+	}
+	d := time.Duration(secs * float64(time.Second))
+	if d > maxSleep {
+		d = maxSleep
+	}
+	sh.pause(d)
+	return ""
+}
+
+// maxSleep caps how long a sleep will actually block, so the realistic pause never
+// becomes a way to pin the session's goroutine for an attacker-chosen duration.
+const maxSleep = 10 * time.Second
+
+// evalArith evaluates a bash $((...)) integer expression: + - * / % with
+// parentheses and unary sign, bare names and $names resolved from the environment
+// (unset is 0), so echo $((1+1)) and echo $((count*2)) behave like bash rather than
+// falling through to a "command not found" for the leading $(( token.
+func (sh *Shell) evalArith(expr string) int {
+	a := &arith{sh: sh, s: expr}
+	return a.parseAdd()
+}
+
+type arith struct {
+	sh  *Shell
+	s   string
+	pos int
+}
+
+func (a *arith) ws() {
+	for a.pos < len(a.s) && a.s[a.pos] == ' ' {
+		a.pos++
+	}
+}
+
+func (a *arith) parseAdd() int {
+	v := a.parseMul()
+	for {
+		a.ws()
+		if a.pos < len(a.s) && (a.s[a.pos] == '+' || a.s[a.pos] == '-') {
+			op := a.s[a.pos]
+			a.pos++
+			r := a.parseMul()
+			if op == '+' {
+				v += r
+			} else {
+				v -= r
+			}
+			continue
+		}
+		return v
+	}
+}
+
+func (a *arith) parseMul() int {
+	v := a.parseUnary()
+	for {
+		a.ws()
+		if a.pos < len(a.s) && (a.s[a.pos] == '*' || a.s[a.pos] == '/' || a.s[a.pos] == '%') {
+			op := a.s[a.pos]
+			a.pos++
+			r := a.parseUnary()
+			switch {
+			case op == '*':
+				v *= r
+			case r == 0:
+				v = 0 // bash errors on divide-by-zero; 0 is a harmless stand-in here
+			case op == '/':
+				v /= r
+			default:
+				v %= r
+			}
+			continue
+		}
+		return v
+	}
+}
+
+func (a *arith) parseUnary() int {
+	a.ws()
+	if a.pos < len(a.s) {
+		switch a.s[a.pos] {
+		case '-':
+			a.pos++
+			return -a.parseUnary()
+		case '+':
+			a.pos++
+			return a.parseUnary()
+		}
+	}
+	return a.parsePrimary()
+}
+
+func (a *arith) parsePrimary() int {
+	a.ws()
+	if a.pos < len(a.s) && a.s[a.pos] == '(' {
+		a.pos++
+		v := a.parseAdd()
+		a.ws()
+		if a.pos < len(a.s) && a.s[a.pos] == ')' {
+			a.pos++
+		}
+		return v
+	}
+	if a.pos < len(a.s) && a.s[a.pos] == '$' {
+		a.pos++ // $name inside arithmetic behaves like name
+	}
+	start := a.pos
+	for a.pos < len(a.s) && a.s[a.pos] >= '0' && a.s[a.pos] <= '9' {
+		a.pos++
+	}
+	if a.pos > start {
+		n, _ := strconv.Atoi(a.s[start:a.pos])
+		return n
+	}
+	for a.pos < len(a.s) && (a.s[a.pos] == '_' || isAlnum(a.s[a.pos])) {
+		a.pos++
+	}
+	if a.pos > start {
+		if v, err := strconv.Atoi(a.sh.getenv(a.s[start:a.pos])); err == nil {
+			return v
+		}
+	}
+	return 0
 }
 
 func (sh *Shell) getenv(name string) string {
@@ -726,7 +904,9 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 		return sh.cmdService(args), 0
 	case "dpkg":
 		return sh.cmdDpkg(args), 0
-	case "sleep", "true", ":", "clear", "kill", "killall", "sync", "reset":
+	case "sleep":
+		return sh.cmdSleep(args), 0
+	case "true", ":", "clear", "kill", "killall", "sync", "reset":
 		return "", 0
 	case "chpasswd", "useradd", "usermod", "userdel", "adduser", "groupadd", "groupdel":
 		// Account-management and persistence commands a loader runs after break-in
