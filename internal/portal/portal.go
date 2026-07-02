@@ -27,18 +27,23 @@ import (
 var jtPrizeJPG []byte
 
 // maxConcurrentSSE bounds live event-stream subscribers so they cannot exhaust
-// file descriptors and goroutines.
-const maxConcurrentSSE = 64
+// file descriptors and goroutines. maxConcurrentWatch does the same for the live
+// session-watch streams, which tail a cast file each.
+const (
+	maxConcurrentSSE   = 64
+	maxConcurrentWatch = 32
+)
 
 // Portal holds the portal's dependencies. It is constructed by New and run by
 // Start.
 type Portal struct {
-	cfg      config.Config
-	logger   *event.Logger
-	geo      *geo.Resolver
-	consoles map[string]*consoleEntry
-	sseGate  chan struct{} // bounds concurrent SSE subscribers
-	version  string        // build version, shown in the console
+	cfg       config.Config
+	logger    *event.Logger
+	geo       *geo.Resolver
+	consoles  map[string]*consoleEntry
+	sseGate   chan struct{} // bounds concurrent SSE subscribers
+	watchGate chan struct{} // bounds concurrent live session watchers
+	version   string        // build version, shown in the console
 }
 
 // SetVersion records the build version string for display in the console.
@@ -65,11 +70,12 @@ func New(cfg config.Config, logger *event.Logger) *Portal {
 		}
 	}
 	return &Portal{
-		cfg:      cfg,
-		logger:   logger,
-		geo:      resolver,
-		consoles: buildConsoles(cfg, logger),
-		sseGate:  make(chan struct{}, maxConcurrentSSE),
+		cfg:       cfg,
+		logger:    logger,
+		geo:       resolver,
+		consoles:  buildConsoles(cfg, logger),
+		sseGate:   make(chan struct{}, maxConcurrentSSE),
+		watchGate: make(chan struct{}, maxConcurrentWatch),
 	}
 }
 
@@ -115,7 +121,9 @@ func (p *Portal) engine() http.Handler {
 	mux.HandleFunc("GET /dashboard/ip/{ip}", p.byIP)
 	mux.HandleFunc("GET /dashboard/session/{id}", p.bySession)
 	mux.HandleFunc("GET /dashboard/recordings", p.recordings)
+	mux.HandleFunc("GET /dashboard/sessions/active", p.activeSessions)
 	mux.HandleFunc("GET /dashboard/cast/{id}", p.cast)
+	mux.HandleFunc("GET /dashboard/watch/{id}", p.watch)
 	mux.HandleFunc("GET /dashboard/jt-prize.jpg", p.jtPrize)
 	return recoverHandler(mux)
 }

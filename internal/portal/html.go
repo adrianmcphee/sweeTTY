@@ -176,7 +176,32 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .replayhead svg{width:16px;height:16px}
 .replayhead .rid{font-family:var(--mono);color:var(--mut);font-weight:500}
 .replayhead .spd{color:var(--mut2);font-size:11px;font-weight:500}
-#term{flex:1;margin:0;padding:14px 16px;overflow-y:auto;font-family:var(--mono);font-size:12.5px;line-height:1.5;color:#d4d4d8;white-space:pre-wrap;word-break:break-word}
+#term{flex:1;margin:0;padding:14px 16px;overflow-y:auto;font-family:var(--mono);font-size:12.5px;line-height:1.5;color:#d4d4d8;white-space:pre-wrap;word-break:break-word;background:radial-gradient(120% 80% at 50% 0,rgba(30,30,36,.5),#0c0c0e 70%)}
+.replayhead .livepill{display:none;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,.14);color:#f87171;font-size:10px;font-weight:700;letter-spacing:.07em}
+.replayhead .livepill i{width:6px;height:6px;border-radius:50%;background:#ef4444;animation:lpulse 1.6s infinite}
+.replayhead .livepill.on{display:inline-flex}
+.replaybox.live{border-color:rgba(239,68,68,.5)}
+@keyframes lpulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}70%{box-shadow:0 0 0 7px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.replayfoot{padding:8px 15px;border-top:1px solid var(--bd);font-size:11px;color:var(--mut2);font-family:var(--mono);min-height:15px;display:flex;align-items:center;gap:12px}
+.replayfoot .cur{display:none;width:7px;height:13px;background:#22c55e;vertical-align:middle}
+.replayfoot.live .cur{display:inline-block;animation:blink 1.05s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.livecount.on{background:#ef4444;color:#fff}
+.livedot{display:none;width:7px;height:7px;border-radius:50%;background:#ef4444;margin-left:8px;animation:lpulse 1.6s infinite}
+.livedot.on{display:inline-block}
+.liverail{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;padding:14px;overflow-y:auto}
+.liveempty{padding:44px 20px;text-align:center;color:var(--mut2);font-size:13px;line-height:1.6}
+.livecard{background:var(--panel2);border:1px solid var(--bd);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:11px;transition:border-color .15s,transform .15s}
+.livecard:hover{border-color:rgba(239,68,68,.4);transform:translateY(-1px)}
+.livecard .lc_top{display:flex;align-items:center;gap:8px}
+.livecard .lc_dot{width:7px;height:7px;border-radius:50%;background:#ef4444;animation:lpulse 1.6s infinite;flex:none}
+.livecard .lc_ip{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--fg)}
+.livecard .lc_flag{font-size:11px;color:var(--mut2);margin-left:auto}
+.livecard .lc_meta{display:flex;gap:16px;font-size:11px;color:var(--mut2)}
+.livecard .lc_meta b{color:var(--fg);font-weight:600}
+.lc_watch{display:flex;align-items:center;justify-content:center;gap:7px;padding:8px;border-radius:9px;background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25);cursor:pointer;font-weight:600;font-size:12.5px}
+.lc_watch:hover{background:rgba(239,68,68,.2)}
+.lc_watch svg{width:15px;height:15px}
 .row.new{animation:rowin 1.05s ease-out}
 @keyframes rowin{0%{background:var(--flash,rgba(59,130,246,.16))}100%{background:transparent}}
 
@@ -220,6 +245,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <nav>
 <div class="navsec">Monitor</div>
 <div class="navitem active" data-view="feed"><span data-icon="feed"></span><span class="grow">Live feed</span></div>
+<div class="navitem" data-view="live"><span data-icon="live"></span><span class="grow">Live sessions</span><span class="navbadge livecount" id="nav_live">0</span></div>
 <div class="navitem" data-view="sources"><span data-icon="sources"></span><span class="grow">Sources</span><span class="navbadge" id="nav_src">0</span></div>
 <div class="navitem" data-view="recon"><span data-icon="scan"></span><span class="grow">Recon</span></div>
 <div class="navitem" data-view="payloads"><span data-icon="downloads"></span><span class="grow">Payload pulls</span><span class="navbadge" id="nav_pl">0</span></div>
@@ -255,6 +281,14 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div class="panelhead"><span data-icon="feed"></span>Event stream<span class="sp" style="flex:1"></span><span class="spark" id="spark"></span><span class="count" id="feed_count">0</span></div>
 <button class="newpill" id="newpill"></button>
 <div class="scroll" id="feed"></div>
+</div>
+</section>
+
+<section class="view" id="view_live">
+<div class="panel">
+<div class="panelhead"><span data-icon="live"></span>Sessions in progress<span class="livedot" id="live_pulse"></span><span class="sp" style="flex:1"></span><span class="count" id="live_count">0</span></div>
+<div class="liverail" id="live_rail"></div>
+<div class="liveempty" id="live_empty">No live sessions right now. When an attacker is at the keyboard, they appear here to watch in real time.</div>
 </div>
 </section>
 
@@ -312,7 +346,11 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div id="detailbody"></div>
 </aside>
 
-<div id="replay"><div class="replaybox"><div class="replayhead"><span data-icon="feed"></span>Session replay<span class="rid" id="replay_title"></span><span class="grow" style="flex:1"></span><span class="spd">1.6x</span><button class="iconbtn" id="replay_close"><span data-icon="close"></span></button></div><pre id="term"></pre></div></div>
+<div id="replay"><div class="replaybox">
+<div class="replayhead"><span class="rmode" id="replay_mode" data-icon="live"></span><span id="replay_kind">Session replay</span><span class="rid" id="replay_title"></span><span class="livepill" id="replay_live"><i></i>LIVE</span><span class="grow" style="flex:1"></span><span class="spd" id="replay_meta"></span><button class="iconbtn" id="replay_close"><span data-icon="close"></span></button></div>
+<pre id="term"></pre>
+<div class="replayfoot" id="replay_foot"></div>
+</div></div>
 
 <div id="toasts"></div>
 <canvas id="confetti"></canvas>
@@ -333,7 +371,8 @@ close:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/
 sound:'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19.5 5a9 9 0 0 1 0 14"/>',
 soundoff:'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
 star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-scan:'<circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="3" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="2.5"/>'
+scan:'<circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="3" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="2.5"/>',
+live:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'
 };
 function setIcon(node,name){if(ICONS[name])node.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONS[name]+'</svg>';}
 function paintIcons(root){var ns=(root||document).querySelectorAll('[data-icon]');for(var i=0;i<ns.length;i++)setIcon(ns[i],ns[i].getAttribute('data-icon'));}
@@ -433,10 +472,11 @@ if(curView==='sources'||curView==='recon'||NOTABLE[e.event])scheduleOverview();
 if(curView==='honeytokens'&&e.event==='HONEYTOKEN')loadHoneytokens();
 if(curView==='payloads'&&e.event==='DOWNLOAD_ATTEMPT')loadPayloads();
 if(e.event==='SESSION_END')loadRecordings();
+if(e.event==='SESSION_START'||e.event==='SESSION_END')scheduleActive();
 if(detailIP&&srcOf(e)===detailIP)scheduleDetailRefresh();
 }
 
-var VIEWS={feed:['Live feed','streaming events as they arrive'],sources:['Sources','every host that has touched the honeypot'],recon:['Recon','port scans, geography, and client tooling'],payloads:['Payload pulls','the malware URLs attackers tried to fetch, by source'],honeytokens:['90s JT Reveals','attackers who dug far enough to hit a Justin Timberlake reveal']};
+var VIEWS={feed:['Live feed','streaming events as they arrive'],live:['Live sessions','watch an attacker at the keyboard, right now'],sources:['Sources','every host that has touched the honeypot'],recon:['Recon','port scans, geography, and client tooling'],payloads:['Payload pulls','the malware URLs attackers tried to fetch, by source'],honeytokens:['90s JT Reveals','attackers who dug far enough to hit a Justin Timberlake reveal']};
 var curView='feed';
 function showView(name){
 curView=name;
@@ -849,9 +889,34 @@ fetch('/dashboard/recordings',{credentials:'same-origin'})
 }
 
 var replayEl=document.getElementById('replay');
+var replayBox=replayEl.querySelector('.replaybox');
 var termEl=document.getElementById('term');
 var replayActive=false;
-document.getElementById('replay_close').addEventListener('click',function(){replayActive=false;replayEl.classList.remove('open');});
+var liveES=null;
+function closeTheater(){
+replayActive=false;
+if(liveES){liveES.close();liveES=null;}
+replayEl.classList.remove('open');
+replayBox.classList.remove('live');
+document.getElementById('replay_live').classList.remove('on');
+document.getElementById('replay_foot').classList.remove('live');
+}
+document.getElementById('replay_close').addEventListener('click',closeTheater);
+replayEl.addEventListener('click',function(e){if(e.target===replayEl)closeTheater();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&replayEl.classList.contains('open'))closeTheater();});
+
+function openTheater(id,kind){
+closeTheater();
+document.getElementById('replay_title').textContent=id;
+document.getElementById('replay_kind').textContent=kind;
+termEl.textContent='';
+replayEl.classList.add('open');
+}
+function appendTerm(d){
+var atBottom=termEl.scrollHeight-termEl.scrollTop-termEl.clientHeight<40;
+termEl.textContent+=cleanTerm(d);
+if(atBottom)termEl.scrollTop=termEl.scrollHeight;
+}
 
 function cleanTerm(s){
 s=s.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g,'');
@@ -868,9 +933,9 @@ try{var a=JSON.parse(ln);if(a&&a.length===3&&a[1]==='o')out.push({t:a[0],d:a[2]}
 return out;
 }
 function playCast(id){
-document.getElementById('replay_title').textContent=id;
-termEl.textContent='';
-replayEl.classList.add('open');
+openTheater(id,'Session replay');
+document.getElementById('replay_meta').textContent='replay 1.6x';
+document.getElementById('replay_foot').textContent='recorded session';
 fetch('/dashboard/cast/'+encodeURIComponent(id),{credentials:'same-origin'})
 .then(function(r){return r.text();})
 .then(function(text){playFrames(parseCast(text));})
@@ -881,13 +946,76 @@ replayActive=true;
 var i=0;
 function step(){
 if(!replayActive||i>=frames.length)return;
-termEl.textContent+=cleanTerm(frames[i].d);
-termEl.scrollTop=termEl.scrollHeight;
+appendTerm(frames[i].d);
 var gap=i+1<frames.length?Math.min(frames[i+1].t-frames[i].t,1.2):0;
 i++;
 setTimeout(step,Math.max(gap*1000/1.6,8));
 }
 step();
+}
+function watchLive(id,ip){
+openTheater(id,'Watching live');
+replayBox.classList.add('live');
+document.getElementById('replay_live').classList.add('on');
+document.getElementById('replay_meta').textContent='real time';
+var foot=document.getElementById('replay_foot');
+foot.classList.add('live');foot.textContent='';
+if(ip)foot.appendChild(el('span',null,'source '+ip));
+var st=el('span',null,'connecting...');foot.appendChild(st);
+foot.appendChild(el('span','cur',''));
+replayActive=true;
+var es=new EventSource('/dashboard/watch/'+encodeURIComponent(id));
+liveES=es;
+es.addEventListener('frame',function(ev){
+st.textContent='live';
+try{var a=JSON.parse(ev.data);if(a&&a.length===3&&a[1]==='o')appendTerm(a[2]);}catch(e){}
+});
+es.onerror=function(){st.textContent='stream ended';};
+}
+
+// --- live sessions rail ---------------------------------------------------
+var activeSessions=[],activeT=0;
+function scheduleActive(){if(activeT)return;activeT=setTimeout(function(){activeT=0;loadActive();},700);}
+function fmtElapsed(ms){
+var s=Math.max(0,Math.floor((Date.now()-ms)/1000));
+if(s<60)return s+'s';
+var m=Math.floor(s/60);if(m<60)return m+'m '+(s%60)+'s';
+return Math.floor(m/60)+'h '+(m%60)+'m';
+}
+function loadActive(){
+fetch('/dashboard/sessions/active',{credentials:'same-origin'})
+.then(function(r){return r.json();})
+.then(function(d){activeSessions=d.sessions||[];renderLiveRail();})
+.catch(function(){});
+}
+function renderLiveRail(){
+var n=activeSessions.length;
+document.getElementById('live_count').textContent=n;
+var badge=document.getElementById('nav_live');badge.textContent=n;badge.classList.toggle('on',n>0);
+document.getElementById('live_pulse').classList.toggle('on',n>0);
+document.getElementById('live_empty').style.display=n?'none':'block';
+var rail=document.getElementById('live_rail');rail.textContent='';
+for(var i=0;i<n;i++){(function(s){
+var card=el('div','livecard');
+var top=el('div','lc_top');
+top.appendChild(el('span','lc_dot',''));
+top.appendChild(el('span','lc_ip',s.ip||s.id));
+if(s.country)top.appendChild(el('span','lc_flag',s.country));
+card.appendChild(top);
+var meta=el('div','lc_meta');
+meta.appendChild(el('span',null,fmtElapsed(s.started_ms)+' connected'));
+meta.appendChild(el('span',null,(s.commands||0)+' cmds'));
+if(s.protocol)meta.appendChild(el('span',null,String(s.protocol).toUpperCase()));
+card.appendChild(meta);
+if(s.recorded){
+var btn=el('div','lc_watch');var ic=el('span',null,'');setIcon(ic,'live');btn.appendChild(ic);btn.appendChild(el('span',null,'Watch live'));
+btn.addEventListener('click',function(){watchLive(s.id,s.ip);});
+card.appendChild(btn);
+}else{
+card.appendChild(el('div','lc_meta muted','session recording is off'));
+}
+rail.appendChild(card);
+})(activeSessions[i]);}
 }
 
 function loadConsoles(){
@@ -1128,9 +1256,12 @@ renderSpark();setInterval(sparkTick,2500);
 try{if(localStorage.getItem('sweetty_snd')==='1')setSound(true);}catch(x){}
 document.addEventListener('pointerdown',gestureResume);
 setTimeout(function(){hydrated=true;},1500);
-load();connect();loadConsoles();loadRecordings();loadOverview();
+load();connect();loadConsoles();loadRecordings();loadOverview();loadActive();
 // Refresh the recon rollup (and the port-scan stat card it feeds) on a slow,
 // bounded timer so it stays current without re-reading the whole log per event.
 setInterval(loadOverview,30000);
+// Poll the live-session rail often enough to feel real time, updating the elapsed
+// timers and the nav badge; SESSION_START/END also nudge it immediately.
+setInterval(loadActive,3000);
 </script>
 </body></html>`
