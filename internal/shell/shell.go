@@ -840,10 +840,17 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 	case "whoami":
 		return sh.user + "\n", 0
 	case "id":
-		if sh.user == "root" {
-			return "uid=0(root) gid=0(root) groups=0(root)\n", 0
-		}
-		return fmt.Sprintf("uid=%d(%s) gid=%d(%s) groups=%d(%s)\n", sh.p.UserUID, sh.user, sh.p.UserUID, sh.user, sh.p.UserUID, sh.user), 0
+		return sh.cmdId(args), 0
+	case "groups":
+		return sh.cmdGroups(args)
+	case "ping", "ping6":
+		return sh.cmdPing(args)
+	case "dig", "nslookup", "host":
+		return sh.cmdResolve(args)
+	case "du":
+		return sh.cmdDu(args)
+	case "md5sum", "sha1sum", "sha256sum":
+		return sh.cmdHashsum(args)
 	case "hostname":
 		return sh.p.Hostname + "\n", 0
 	case "uname":
