@@ -27,13 +27,14 @@ import (
 //go:embed jt-prize.jpg
 var jtPrizeJPG []byte
 
-// jtSplashFS holds the colour-ASCII JT boot splashes, compact colour-run renders of
-// the libcaca portraits, each stored gzipped and served with Content-Encoding: gzip
-// so a portrait costs the binary and the wire tens of KB rather than the ~1 MB it
-// inflates to. Drop another jt-splash-*.html.gz in beside these and it joins the
-// rotation on the next build, one chosen at random per load.
+// jtSplashFS holds the colour-ASCII JT boot splashes as compact palette + row
+// run-length JSON (the libcaca portrait reduced to its colour grid), each stored
+// gzipped and served with Content-Encoding: gzip so a portrait costs the binary and
+// the wire under 20 KB and the browser paints it to a canvas. Drop another
+// jt-splash-*.json.gz in beside these and it joins the rotation on the next build,
+// one chosen at random per load.
 //
-//go:embed jt-splash-*.html.gz
+//go:embed jt-splash-*.json.gz
 var jtSplashFS embed.FS
 
 // loadSplashes reads every embedded splash variant into memory once at startup.
@@ -216,7 +217,7 @@ func (p *Portal) jtSplash(w http.ResponseWriter, _ *http.Request) {
 	pick := p.splashes[mrand.IntN(len(p.splashes))]
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Encoding", "gzip")
-	writeData(w, http.StatusOK, "text/html; charset=utf-8", pick)
+	writeData(w, http.StatusOK, "application/json; charset=utf-8", pick)
 }
 
 // addr renders the portal bind address. The default bind is loopback, so the

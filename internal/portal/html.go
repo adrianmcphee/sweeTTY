@@ -240,9 +240,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 #splash.hide{opacity:0;transition:opacity .5s ease;pointer-events:none}
 #splash.gone{display:none}
 .splashwrap{display:flex;flex-direction:column;align-items:center;gap:16px;animation:splashIn .55s cubic-bezier(.2,.75,.25,1) both}
-.splashart{line-height:0}
-.jtart{margin:0;font-family:var(--mono);font-size:6px;line-height:6px;letter-spacing:0;white-space:pre;display:inline-block;transform-origin:center;border-radius:10px;overflow:hidden;box-shadow:0 24px 90px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.05)}
-.jtart b{font-weight:400}
+#splash_canvas{display:block;image-rendering:pixelated;border-radius:10px;box-shadow:0 24px 90px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.05)}
 .splashcap{font-family:var(--mono);font-size:11px;letter-spacing:.32em;color:var(--mut2);text-transform:uppercase;animation:capblink 1.1s ease-in-out infinite}
 @keyframes splashIn{0%{opacity:0;transform:translateY(26px) scale(.84)}100%{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes capblink{0%,100%{opacity:.3}50%{opacity:.85}}
@@ -366,7 +364,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div id="toasts"></div>
 <canvas id="confetti"></canvas>
 <div id="jtflash"><img src="/dashboard/jt-prize.jpg" alt=""></div>
-<div id="splash"><div class="splashwrap"><div class="splashart" id="splash_art"></div><div class="splashcap" id="splash_cap">booting console</div></div></div>
+<div id="splash"><div class="splashwrap"><canvas id="splash_canvas"></canvas><div class="splashcap" id="splash_cap">booting console</div></div></div>
 
 <script>
 var ICONS={
@@ -1275,17 +1273,20 @@ var sp=document.getElementById('splash');if(!sp)return;
 sp.addEventListener('click',dismissSplash);
 setTimeout(dismissSplash,2800); // safety: never let a stalled fetch trap the UI
 fetch('/dashboard/jt-splash',{credentials:'same-origin'})
-.then(function(r){return r.text();})
-.then(function(h){
-var art=document.getElementById('splash_art');art.innerHTML=h;
-var pre=art.querySelector('.jtart');
-if(pre){
-var w=pre.offsetWidth||pre.scrollWidth,ht=pre.offsetHeight||pre.scrollHeight;
-var s=Math.min((window.innerWidth*0.9)/w,(window.innerHeight*0.78)/ht,1.8);
-if(s>0&&isFinite(s))pre.style.transform='scale('+s+')';
+.then(function(r){return r.json();})
+.then(function(d){
+var cv=document.getElementById('splash_canvas');if(!cv||!d||!d.rows)return;
+cv.width=d.w;cv.height=d.h;
+var ctx=cv.getContext('2d');
+for(var y=0;y<d.rows.length;y++){
+var row=d.rows[y],x=0;
+for(var k=0;k<row.length;k+=2){ctx.fillStyle='#'+d.pal[row[k]];ctx.fillRect(x,y,row[k+1],1);x+=row[k+1];}
 }
+// display scaled to fit the viewport with square cells (pixelated keeps it crisp)
+var s=Math.min((window.innerWidth*0.9)/d.w,(window.innerHeight*0.78)/d.h);
+cv.style.width=(d.w*s)+'px';cv.style.height=(d.h*s)+'px';
 var cap=document.getElementById('splash_cap');if(cap)cap.textContent='console ready';
-setTimeout(dismissSplash,1200); // hold ~1s after the art lands, then animate out
+setTimeout(dismissSplash,1200); // hold ~1s after the portrait paints, then animate out
 })
 .catch(dismissSplash);
 }

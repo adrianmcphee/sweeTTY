@@ -2,14 +2,14 @@ package portal
 
 import (
 	"compress/gzip"
+	"encoding/json"
 	"io"
-	"strings"
 	"testing"
 )
 
-// TestJTSplashServesGzippedArt proves the boot splash is served pre-gzipped and
-// decodes to the colour-ASCII pre fragment the dashboard animates on load.
-func TestJTSplashServesGzippedArt(t *testing.T) {
+// TestJTSplashServesGzippedGrid proves the boot splash is served pre-gzipped and
+// decodes to a valid palette + row grid the dashboard paints to a canvas on load.
+func TestJTSplashServesGzippedGrid(t *testing.T) {
 	p := portalWithLog(t, nil, "")
 	w := dashGet(t, p, "/dashboard/jt-splash")
 	if w.Code != 200 {
@@ -26,7 +26,16 @@ func TestJTSplashServesGzippedArt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `class="jtart"`) {
-		t.Errorf("decoded splash does not contain the jtart fragment")
+	var grid struct {
+		W    int      `json:"w"`
+		H    int      `json:"h"`
+		Pal  []string `json:"pal"`
+		Rows [][]int  `json:"rows"`
+	}
+	if err := json.Unmarshal(body, &grid); err != nil {
+		t.Fatalf("decoded splash is not valid JSON: %v", err)
+	}
+	if grid.W <= 0 || grid.H <= 0 || len(grid.Pal) == 0 || len(grid.Rows) != grid.H {
+		t.Errorf("splash grid malformed: w=%d h=%d pal=%d rows=%d", grid.W, grid.H, len(grid.Pal), len(grid.Rows))
 	}
 }
