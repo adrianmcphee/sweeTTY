@@ -20,7 +20,6 @@ package ssh
 import (
 	"encoding/binary"
 	"errors"
-	"io"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -29,6 +28,7 @@ import (
 	"sweetty/internal/persona"
 	"sweetty/internal/server"
 	"sweetty/internal/shell"
+	"sweetty/internal/term"
 	"sweetty/internal/util"
 	"sweetty/internal/vfs"
 )
@@ -292,7 +292,11 @@ func (pr *Protocol) serveSession(s *server.Session, nc gossh.NewChannel) {
 	// erase), because the client put its terminal in raw mode and sends bare
 	// keystrokes. An exec command, or a shell with no PTY, reads the channel raw.
 	if sr.pty && !sr.exec {
-		s.Rebind(&cookedTTY{ch: ch})
+		// An interactive PTY shell: cook input server-side (echo, backspace, Enter) and
+		// register the terminal so a password prompt can suppress echo.
+		ct := term.New(ch, ch)
+		s.Rebind(ct)
+		s.SetEchoController(ct)
 	} else {
 		s.Rebind(ch)
 	}
@@ -307,100 +311,13 @@ func (pr *Protocol) serveSession(s *server.Session, nc gossh.NewChannel) {
 	sendExitStatus(ch, uint32(exitCode))
 }
 
-// cookedTTY gives the interactive SSH shell a minimal terminal line discipline. A
-// client that requested a PTY puts its local terminal in raw mode and sends each
-// keystroke unprocessed, expecting the server to echo input and turn Enter (a bare
-// CR) into a line. Real sshd delegates this to the kernel PTY; SweeTTY has no PTY,
-// so it cooks here: it echoes printable input, handles backspace, treats CR or LF
-// as end-of-line (emitting a clean LF to the shell's line reader), and surfaces
-// Ctrl-D on an empty line as EOF. Without this an attacker would type into a shell
-// that echoes nothing and never accepts a command, which is both unusable and an
-// obvious tell.
-// maxCookedLine bounds one edited input line in the SSH cooked path, matching the
-// line reader's own 64KB ceiling that this path bypasses. Without it a newline-free
-// flood grows the line and pending buffers until the process OOMs.
-const maxCookedLine = 64 * 1024
-
-type cookedTTY struct {
-	ch      gossh.Channel
-	pending []byte // cooked bytes ready to hand to the line reader
-	line    []byte // the line currently being edited
-	prevCR  bool   // last byte was CR, so swallow a following LF
-	eof     bool
-}
-
-func (t *cookedTTY) Write(p []byte) (int, error) { return t.ch.Write(p) }
-func (t *cookedTTY) Close() error                { return t.ch.Close() }
-
-func (t *cookedTTY) Read(p []byte) (int, error) {
-	for len(t.pending) == 0 {
-		if t.eof {
-			return 0, io.EOF
-		}
-		var buf [256]byte
-		n, err := t.ch.Read(buf[:])
-		if n > 0 {
-			t.cook(buf[:n])
-		}
-		if err != nil && len(t.pending) == 0 {
-			return 0, err
-		}
-	}
-	n := copy(p, t.pending)
-	t.pending = t.pending[n:]
-	return n, nil
-}
-
-// cook processes raw input bytes into echoed, line-edited output appended to
-// t.pending as complete lines.
-func (t *cookedTTY) cook(in []byte) {
-	for _, c := range in {
-		cr := t.prevCR
-		t.prevCR = false
-		switch {
-		case c == '\r':
-			t.endLine()
-			t.prevCR = true
-		case c == '\n':
-			if cr {
-				continue // swallow the LF of a CRLF pair
-			}
-			t.endLine()
-		case c == 0x7f || c == 0x08: // DEL / backspace
-			if len(t.line) > 0 {
-				t.line = t.line[:len(t.line)-1]
-				t.ch.Write([]byte("\b \b"))
-			}
-		case c == 0x03: // Ctrl-C: abandon the current line
-			t.ch.Write([]byte("^C\r\n"))
-			t.line = t.line[:0]
-			t.pending = append(t.pending, '\n')
-		case c == 0x04: // Ctrl-D: EOF on an empty line, ignored mid-line
-			if len(t.line) == 0 {
-				t.eof = true
-				return
-			}
-		case c >= 0x20: // printable; other control bytes are ignored
-			t.line = append(t.line, c)
-			t.ch.Write([]byte{c})
-			// A newline-free stream would otherwise grow t.line (and t.pending)
-			// without bound, since this path never returns to the line reader's
-			// maxLineBytes ceiling. Flush an over-long line so memory is released,
-			// the way a real terminal eventually wraps and submits.
-			if len(t.line) >= maxCookedLine {
-				t.endLine()
-			}
-		}
-	}
-}
-
-// endLine echoes a newline and hands the buffered line to the reader.
-func (t *cookedTTY) endLine() {
-	t.ch.Write([]byte("\r\n"))
-	t.pending = append(t.pending, t.line...)
-	t.pending = append(t.pending, '\n')
-	t.line = t.line[:0]
-}
+// The interactive SSH shell needs a server-side line discipline: a client that
+// requested a PTY puts its own terminal in raw mode and sends each keystroke
+// unprocessed, expecting the server to echo input and turn Enter into a line. Real
+// sshd delegates this to the kernel PTY; SweeTTY has none, so it cooks entirely in
+// process with term.Cooked (shared with telnet's character mode). Without it an
+// attacker would type into a shell that echoes nothing and never accepts a command,
+// which is both unusable and an obvious tell.
 
 // shellUser maps the authenticated SSH user to the account the shell runs as. Only
 // root and the persona's primary user can authenticate (see persona.Accept), so any

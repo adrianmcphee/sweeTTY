@@ -55,6 +55,11 @@ type Session struct {
 	// bridge) drive the shell for its side-effect capture without the shell's output
 	// reaching the wire. A session is served by one goroutine, so no lock is needed.
 	capture *strings.Builder
+
+	// echo, when set, is the terminal layer that drives server-side echo, so
+	// ReadPassword can suppress it around a password prompt. Nil for protocols that
+	// do not echo server-side.
+	echo EchoController
 }
 
 // readDeadline returns the deadline to arm before a read: the idle timeout from
@@ -294,6 +299,38 @@ func (s *Session) ReadLine() (string, bool) {
 }
 
 func (s *Session) Prompt(label string) (string, bool) {
+	s.Write(label)
+	return s.ReadLine()
+}
+
+// EchoController is a protocol's terminal layer when the server drives echo (the
+// SSH and telnet cooked terminals). Turning echo off hides a password the way a real
+// login does, so the honeypot never shows a credential it prompts for.
+type EchoController interface {
+	SetEcho(on bool)
+}
+
+// SetEchoController records the terminal that drives echo for this session, so
+// ReadPassword can suppress it. Protocols that echo server-side (SSH, telnet in
+// character mode) register their cooked terminal here; others leave it nil.
+func (s *Session) SetEchoController(c EchoController) { s.echo = c }
+
+// ReadPassword prompts and reads a line with local echo suppressed, so a password is
+// captured without ever being shown. When no echo controller is set (a protocol
+// where the server does not drive echo, or a non-terminal capture) it degrades to a
+// plain prompt. The trailing newline the reader consumes is still echoed by the
+// terminal, so the cursor advances past the hidden entry.
+//
+// Echo is suppressed BEFORE the label is written: for telnet that suppression is an
+// IAC WILL ECHO on the wire, and it must land while the client is still reading the
+// prompt. Writing the label first would let the client finish reading and start
+// sending the password, so the IAC write and the client's write would deadlock on an
+// unbuffered connection.
+func (s *Session) ReadPassword(label string) (string, bool) {
+	if s.echo != nil {
+		s.echo.SetEcho(false)
+		defer s.echo.SetEcho(true)
+	}
 	s.Write(label)
 	return s.ReadLine()
 }
