@@ -1271,24 +1271,56 @@ setTimeout(function(){sp.classList.add('gone');sp.innerHTML='';},560);
 function showSplash(){
 var sp=document.getElementById('splash');if(!sp)return;
 sp.addEventListener('click',dismissSplash);
-setTimeout(dismissSplash,2800); // safety: never let a stalled fetch trap the UI
+setTimeout(dismissSplash,5000); // safety: never let a stalled fetch trap the UI
 fetch('/dashboard/jt-splash',{credentials:'same-origin'})
 .then(function(r){return r.json();})
-.then(function(d){
-var cv=document.getElementById('splash_canvas');if(!cv||!d||!d.rows)return;
-cv.width=d.w;cv.height=d.h;
-var ctx=cv.getContext('2d');
-for(var y=0;y<d.rows.length;y++){
-var row=d.rows[y],x=0;
-for(var k=0;k<row.length;k+=2){ctx.fillStyle='#'+d.pal[row[k]];ctx.fillRect(x,y,row[k+1],1);x+=row[k+1];}
-}
-// display scaled to fit the viewport with square cells (pixelated keeps it crisp)
-var s=Math.min((window.innerWidth*0.9)/d.w,(window.innerHeight*0.78)/d.h);
-cv.style.width=(d.w*s)+'px';cv.style.height=(d.h*s)+'px';
-var cap=document.getElementById('splash_cap');if(cap)cap.textContent='console ready';
-setTimeout(dismissSplash,1200); // hold ~1s after the portrait paints, then animate out
-})
+.then(function(d){if(d&&d.rows)runSplashAnim(d);else dismissSplash();})
 .catch(dismissSplash);
+}
+// runSplashAnim scatters the portrait's pixels, flies them in to assemble it, holds,
+// then blows them back out. Each cell is a particle; positions are written straight
+// into an ImageData buffer (no per-particle fillStyle), so tens of thousands animate
+// smoothly.
+function runSplashAnim(d){
+var cell=2,W=d.w*cell,H=d.h*cell;
+var cv=document.getElementById('splash_canvas');if(!cv)return;
+cv.width=W;cv.height=H;
+var s=Math.min((window.innerWidth*0.9)/W,(window.innerHeight*0.76)/H,1.4);
+cv.style.width=(W*s)+'px';cv.style.height=(H*s)+'px';
+var ctx=cv.getContext('2d'),img=ctx.createImageData(W,H),buf=new Uint32Array(img.data.buffer);
+var pal=d.pal.map(function(h){return (parseInt(h.substr(4,2),16)<<16)|(parseInt(h.substr(2,2),16)<<8)|parseInt(h.substr(0,2),16);});
+var reach=Math.max(W,H),TAU=6.2831853;
+var N=d.w*d.h,TX=new Float32Array(N),TY=new Float32Array(N),SX=new Float32Array(N),SY=new Float32Array(N),EDX=new Float32Array(N),EDY=new Float32Array(N),COL=new Uint32Array(N),DLY=new Float32Array(N),n=0;
+for(var y=0;y<d.h;y++){var row=d.rows[y],x=0;
+for(var k=0;k<row.length;k+=2){var ci=row[k],ln=row[k+1];
+for(var j=0;j<ln;j++){
+TX[n]=x*cell;TY[n]=y*cell;COL[n]=pal[ci];
+var a1=Math.random()*TAU,r1=reach*(0.55+Math.random()*0.8);SX[n]=W/2+Math.cos(a1)*r1;SY[n]=H/2+Math.sin(a1)*r1;
+var a2=Math.random()*TAU,r2=reach*(0.7+Math.random()*0.9);EDX[n]=Math.cos(a2)*r2;EDY[n]=Math.sin(a2)*r2;
+DLY[n]=Math.random();x++;n++;
+}}}
+var ASM=1000,HOLD=700,EXIT=850,t0=null;
+function ease(t){return t<0?0:t>1?1:t*t*(3-2*t);}
+var cap=document.getElementById('splash_cap');
+function frame(ts){
+if(t0===null)t0=ts;var t=ts-t0;
+if(t>=ASM+HOLD+EXIT){dismissSplash();return;}
+buf.fill(0);
+var exiting=t>ASM+HOLD;
+if(cap)cap.textContent=(t<ASM)?'assembling':(exiting?'':'console ready');
+for(var i=0;i<n;i++){
+var px,py,al=255;
+if(t<ASM){var p=ease((t/ASM-DLY[i]*0.35)/0.65);px=SX[i]+(TX[i]-SX[i])*p;py=SY[i]+(TY[i]-SY[i])*p;}
+else if(!exiting){px=TX[i];py=TY[i];}
+else{var q=ease(((t-ASM-HOLD)/EXIT-DLY[i]*0.3)/0.7);px=TX[i]+EDX[i]*q;py=TY[i]+EDY[i]*q;al=(255*(1-q))|0;}
+var ix=px|0,iy=py|0;if(ix<0||iy<0||ix>=W-1||iy>=H-1)continue;
+var c=(al<<24)|COL[i],b0=iy*W+ix;
+buf[b0]=c;buf[b0+1]=c;buf[b0+W]=c;buf[b0+W+1]=c;
+}
+ctx.putImageData(img,0,0);
+requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 }
 showSplash();
 
