@@ -42,10 +42,21 @@ func (pr *Protocol) Name() string { return "https" }
 // responds.
 func (pr *Protocol) ClientFirst() bool { return true }
 
+// DecodesInput reports that this service records its own input: the wire carries
+// a binary TLS ClientHello, not keystrokes, so the server must not raw-tee it
+// into the cast (the bytes render as mojibake in the replay and live watch, and
+// the JSON marshal destroys invalid UTF-8 anyway). Handle records a readable
+// classification frame instead; the faithful bytes stay in the TLS_HELLO event.
+func (pr *Protocol) DecodesInput() bool { return true }
+
 // Handle captures the client's opening bytes, classifies them as a probable TLS
 // ClientHello or not, then tarpits the connection.
 func (pr *Protocol) Handle(s *server.Session) {
 	s.Persona = pr.persona
+
+	// Stop the raw input tee before the first read; anything the client dribbles
+	// during the tarpit stays out of the cast for the same reason.
+	s.RecordInputDecoded()
 
 	// Bound the single capture read via the session's idle timeout.
 	s.IdleTimeout = captureTimeout
@@ -61,6 +72,21 @@ func (pr *Protocol) Handle(s *server.Session) {
 	// tell. HexDump itself returns only the first 32 bytes.
 	isHello := len(buf) >= 2 && buf[0] == 0x16 && buf[1] == 0x03
 	s.LogRaw("TLS_HELLO", fmt.Sprintf("tls_hello=%v hex=%s", isHello, util.HexDump(buf)))
+
+	// Give the cast what the client sent in a form a terminal can show: the
+	// classification and a hex dump, in place of the raw record the tee would
+	// have written.
+	if len(buf) > 0 {
+		kind := "non-TLS opening bytes"
+		if isHello {
+			kind = "TLS ClientHello"
+		}
+		dump := util.HexDump(buf)
+		if len(buf) > 32 {
+			dump += " ..."
+		}
+		s.RecordInput([]byte(kind + "  " + dump + "\r\n"))
+	}
 
 	// Tarpit: never negotiate TLS, just hold the socket open doing nothing, but
 	// release as soon as the client disconnects so a storm cannot pin resources for
