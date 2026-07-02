@@ -162,6 +162,17 @@ func (c *recordConn) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Read tees the attacker's input into the cast as an "i" event, so the replay and
+// live watch show what a source typed even when the honeypot echoes nothing back
+// (the common case for a bot that blasts credentials at a login prompt).
+func (c *recordConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	if n > 0 {
+		c.rec.WriteInput(b[:n])
+	}
+	return n, err
+}
+
 // New creates a server bound to no port yet; call Listen to start accepting.
 func New(port int, logger *event.Logger, p Protocol) *Server {
 	return &Server{port: port, logger: logger, protocol: p}

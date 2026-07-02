@@ -113,3 +113,27 @@ func TestCastSizeIsCapped(t *testing.T) {
 		t.Fatalf("cast grew to %d bytes, past the %d cap", fi.Size(), maxCastBytes)
 	}
 }
+
+// TestWriteInputRecordsIEvents proves attacker input is captured as "i" events
+// alongside the "o" output, so a replay/watch shows what a source typed even when
+// the honeypot echoes nothing.
+func TestWriteInputRecordsIEvents(t *testing.T) {
+	dir := t.TempDir()
+	r, err := New(dir, "inp", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Write([]byte("login: "))
+	r.WriteInput([]byte("root\r\n"))
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "inp.cast"))
+	s := string(data)
+	if !strings.Contains(s, `"o"`) || !strings.Contains(s, "login") {
+		t.Errorf("output not recorded as o event:\n%s", s)
+	}
+	if !strings.Contains(s, `"i"`) || !strings.Contains(s, "root") {
+		t.Errorf("input not recorded as i event:\n%s", s)
+	}
+}

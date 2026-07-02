@@ -61,7 +61,15 @@ func New(dir, id string, width, height int) (*Recorder, error) {
 
 // Write appends one output event carrying b at the current offset from the start
 // of the recording. It is safe to call concurrently and on a nil Recorder.
-func (r *Recorder) Write(b []byte) {
+// Write records server output (bytes the attacker saw) as an "o" event.
+func (r *Recorder) Write(b []byte) { r.event('o', b) }
+
+// WriteInput records attacker input (bytes they sent) as an "i" event, so the
+// replay and the live watch can show what a source typed even when the honeypot
+// echoes nothing back, which is the common case for a bot that blasts credentials.
+func (r *Recorder) WriteInput(b []byte) { r.event('i', b) }
+
+func (r *Recorder) event(kind byte, b []byte) {
 	if r == nil || len(b) == 0 {
 		return
 	}
@@ -75,7 +83,7 @@ func (r *Recorder) Write(b []byte) {
 		return
 	}
 	off := strconv.FormatFloat(time.Since(r.start).Seconds(), 'f', 6, 64)
-	line := "[" + off + ", \"o\", " + string(data) + "]\n"
+	line := "[" + off + ", \"" + string(kind) + "\", " + string(data) + "]\n"
 	if r.written+len(line) > maxCastBytes {
 		// One last marker so a truncated replay is self-explanatory, then stop.
 		r.f.WriteString("[" + off + ", \"o\", \"\\r\\n[recording truncated]\\r\\n\"]\n")
