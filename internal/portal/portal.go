@@ -7,9 +7,10 @@
 package portal
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"io"
+	mrand "math/rand/v2"
 	"net"
 	"net/http"
 	"time"
@@ -26,12 +27,29 @@ import (
 //go:embed jt-prize.jpg
 var jtPrizeJPG []byte
 
-// jtSplashGz is the colour-ASCII JT boot splash, a compact colour-run render of the
-// libcaca portrait, stored gzipped and served with Content-Encoding: gzip so it
-// costs the binary and the wire ~21 KB rather than the ~770 KB it inflates to.
+// jtSplashFS holds the colour-ASCII JT boot splashes, compact colour-run renders of
+// the libcaca portraits, each stored gzipped and served with Content-Encoding: gzip
+// so a portrait costs the binary and the wire tens of KB rather than the ~1 MB it
+// inflates to. Drop another jt-splash-*.html.gz in beside these and it joins the
+// rotation on the next build, one chosen at random per load.
 //
-//go:embed jt-splash.html.gz
-var jtSplashGz []byte
+//go:embed jt-splash-*.html.gz
+var jtSplashFS embed.FS
+
+// loadSplashes reads every embedded splash variant into memory once at startup.
+func loadSplashes() [][]byte {
+	entries, err := jtSplashFS.ReadDir(".")
+	if err != nil {
+		return nil
+	}
+	var out [][]byte
+	for _, e := range entries {
+		if b, err := jtSplashFS.ReadFile(e.Name()); err == nil {
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 // maxConcurrentSSE bounds live event-stream subscribers so they cannot exhaust
 // file descriptors and goroutines. maxConcurrentWatch does the same for the live
@@ -50,6 +68,7 @@ type Portal struct {
 	consoles  map[string]*consoleEntry
 	sseGate   chan struct{} // bounds concurrent SSE subscribers
 	watchGate chan struct{} // bounds concurrent live session watchers
+	splashes  [][]byte      // gzipped boot-splash variants, one picked at random per load
 	version   string        // build version, shown in the console
 }
 
@@ -83,6 +102,7 @@ func New(cfg config.Config, logger *event.Logger) *Portal {
 		consoles:  buildConsoles(cfg, logger),
 		sseGate:   make(chan struct{}, maxConcurrentSSE),
 		watchGate: make(chan struct{}, maxConcurrentWatch),
+		splashes:  loadSplashes(),
 	}
 }
 
@@ -183,13 +203,20 @@ func (p *Portal) jtPrize(w http.ResponseWriter, _ *http.Request) {
 	writeData(w, http.StatusOK, "image/jpeg", jtPrizeJPG)
 }
 
-// jtSplash serves the colour-ASCII boot splash. It is stored gzipped and returned
-// with Content-Encoding: gzip, which every browser transparently inflates, so the
-// dashboard's fetch reads the HTML fragment directly.
+// jtSplash serves one of the colour-ASCII boot splashes, chosen at random per load
+// so a refresh rotates the portrait. Each is stored gzipped and returned with
+// Content-Encoding: gzip, which every browser transparently inflates, so the
+// dashboard's fetch reads the HTML fragment directly. No-store, so the browser asks
+// again each load and the rotation actually happens.
 func (p *Portal) jtSplash(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if len(p.splashes) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	pick := p.splashes[mrand.IntN(len(p.splashes))]
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Encoding", "gzip")
-	writeData(w, http.StatusOK, "text/html; charset=utf-8", jtSplashGz)
+	writeData(w, http.StatusOK, "text/html; charset=utf-8", pick)
 }
 
 // addr renders the portal bind address. The default bind is loopback, so the
