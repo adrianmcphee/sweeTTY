@@ -297,6 +297,12 @@ func (srv *Server) handle(conn net.Conn) {
 
 	remote := conn.RemoteAddr().String()
 	dst := conn.LocalAddr().String()
+	// Wrap the connection for recording up front, so both the bytes we send and the
+	// bytes the attacker sends flow through one tap and the session's reader reads
+	// through it. Teeing stays off until a recorder attaches below (after the scan
+	// check), so the PROXY header and the scan peek are never recorded.
+	rc := &recordConn{Conn: conn}
+	conn = rc
 	reader := bufio.NewReader(conn)
 
 	// Behind an HAProxy edge, the connection opens with a PROXY header naming the
@@ -345,12 +351,22 @@ func (srv *Server) handle(conn net.Conn) {
 	}
 
 	id := util.Base58Gen(12)
-	// Record the real session (after the scan check, so bare-connect scans never
-	// produce an empty cast). The recorder tees output through a wrapped conn.
+	// Attach the recorder now (after the scan check, so bare-connect scans never
+	// produce an empty cast). From here the recordConn tees both output and input.
 	if srv.RecordDir != "" {
 		if rec, err := record.New(srv.RecordDir, id, 80, 24); err == nil {
-			conn = &recordConn{Conn: conn, rec: rec}
+			rc.rec = rec
 			defer rec.Close()
+			// The PROXY-header parse and the scan peek read ahead through the bufio, so
+			// the attacker's first input (a login burst, an HTTP request) can already be
+			// buffered before the recorder attached, and reading it from the buffer would
+			// never hit recordConn.Read. Tee whatever is buffered now so it is captured;
+			// the PROXY header itself was already consumed, so it is not included.
+			if n := reader.Buffered(); n > 0 {
+				if b, err := reader.Peek(n); err == nil {
+					rec.WriteInput(b)
+				}
+			}
 		} else {
 			srv.logger.System("session recording could not start: %v", err)
 		}
