@@ -111,6 +111,29 @@ func TestCredentialCapture(t *testing.T) {
 	}
 }
 
+// TestCRNulEnterSubmitsLogin reproduces an interactive telnet client (macOS/BSD
+// telnet sends CR NUL for Enter, not CR LF): the username must submit and the
+// password prompt appear, rather than the login prompt swallowing carriage returns.
+func TestCRNulEnterSubmitsLogin(t *testing.T) {
+	h, _ := setup(t, "ubuntu")
+	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
+		t.Fatal("never saw login prompt")
+	}
+	h.SendBytes([]byte("admin\r\x00"))
+	if _, ok := h.ReadUntil("Password:", 2*time.Second); !ok {
+		t.Fatal("CR NUL Enter did not submit the username")
+	}
+	h.SendBytes([]byte("pw\r\x00"))
+	h.ReadFor(400 * time.Millisecond)
+	e, ok := h.FindEvent("CREDENTIAL")
+	if !ok {
+		t.Fatal("no CREDENTIAL event")
+	}
+	if e.Username != "admin" {
+		t.Fatalf("username = %q, want admin", e.Username)
+	}
+}
+
 func TestInboundIACStrippedFromUsername(t *testing.T) {
 	h, _ := setup(t, "ubuntu")
 	h.ReadUntil("login:", 2*time.Second)

@@ -152,6 +152,10 @@ func (srv *Server) noteShed() (int, bool) {
 type recordConn struct {
 	net.Conn
 	rec *record.Recorder
+	// noInput suppresses teeing raw reads as input. A protocol that decodes its own
+	// transport framing (telnet stripping IAC) sets this and tees the cleaned bytes
+	// itself, so the cast shows keystrokes rather than wire negotiation.
+	noInput bool
 }
 
 func (c *recordConn) Write(b []byte) (int, error) {
@@ -167,7 +171,7 @@ func (c *recordConn) Write(b []byte) (int, error) {
 // (the common case for a bot that blasts credentials at a login prompt).
 func (c *recordConn) Read(b []byte) (int, error) {
 	n, err := c.Conn.Read(b)
-	if n > 0 {
+	if n > 0 && !c.noInput {
 		c.rec.WriteInput(b[:n])
 	}
 	return n, err
@@ -361,8 +365,11 @@ func (srv *Server) handle(conn net.Conn) {
 			// the attacker's first input (a login burst, an HTTP request) can already be
 			// buffered before the recorder attached, and reading it from the buffer would
 			// never hit recordConn.Read. Tee whatever is buffered now so it is captured;
-			// the PROXY header itself was already consumed, so it is not included.
-			if n := reader.Buffered(); n > 0 {
+			// the PROXY header itself was already consumed, so it is not included. A
+			// protocol that decodes its own input (telnet) reads this same buffer through
+			// its IAC stripper and records the cleaned bytes itself, so raw-teeing here
+			// would both duplicate it and reintroduce the wire framing; skip it for those.
+			if n := reader.Buffered(); n > 0 && !decodesInput(p) {
 				if b, err := reader.Peek(n); err == nil {
 					rec.WriteInput(b)
 				}

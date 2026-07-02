@@ -158,6 +158,48 @@ func (s *Session) ReadN(n int) []byte {
 // telnet IAC stripper) so the higher-level ReadLine/Prompt see clean input.
 func (s *Session) ReplaceReader(r io.Reader) { s.reader = bufio.NewReader(r) }
 
+// Reader returns the current line-reader source, so a protocol installing an input
+// filter can chain onto it rather than reopen the raw connection. Chaining preserves
+// any bytes an earlier read already buffered (a PROXY-header parse reads ahead), so
+// the filter sees the attacker's first keystrokes instead of dropping them.
+func (s *Session) Reader() io.Reader { return s.reader }
+
+// RecordInputDecoded switches input recording from the raw transport to bytes the
+// protocol hands over after decoding its own framing. Telnet calls it because the
+// wire carries IAC option negotiation the shell never sees; recording the raw stream
+// would fill the cast with terminal-control noise instead of what the attacker typed.
+// After this, the protocol must feed cleaned input to RecordInput itself.
+func (s *Session) RecordInputDecoded() {
+	if rc, ok := s.conn.(*recordConn); ok {
+		rc.noInput = true
+	}
+}
+
+// RecordInput tees cleaned attacker input (after a protocol has stripped its own
+// transport framing) into the session recorder. It is a no-op when recording is off
+// or the connection is not being recorded.
+func (s *Session) RecordInput(b []byte) {
+	if rc, ok := s.conn.(*recordConn); ok {
+		rc.rec.WriteInput(b)
+	}
+}
+
+// WriteBytesRaw writes transport-framing bytes straight to the connection, bypassing
+// the session recorder, so telnet's IAC option negotiation (which the client's
+// terminal consumes, never displays) stays out of the cast. In capture mode there is
+// no terminal to negotiate with, so the bytes are dropped.
+func (s *Session) WriteBytesRaw(b []byte) {
+	if s.capture != nil {
+		return
+	}
+	s.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+	if rc, ok := s.conn.(*recordConn); ok {
+		rc.Conn.Write(b)
+		return
+	}
+	s.conn.Write(b)
+}
+
 // ---- IO helpers ----
 
 func (s *Session) Write(str string) {

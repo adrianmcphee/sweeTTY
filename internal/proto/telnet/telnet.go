@@ -77,6 +77,10 @@ func New(fs *vfs.FS, p *persona.Persona, style string) server.Protocol {
 func (t *Protocol) Name() string      { return "telnet" }
 func (t *Protocol) ClientFirst() bool { return false }
 
+// DecodesInput reports that telnet strips IAC negotiation from attacker input and
+// records the cleaned keystrokes itself, so the server must not raw-tee the wire.
+func (t *Protocol) DecodesInput() bool { return true }
+
 func (t *Protocol) Handle(s *server.Session) {
 	s.Persona = t.p
 	// Open with a burst like a real netkit/inetutils telnetd: query the client for
@@ -86,7 +90,7 @@ func (t *Protocol) Handle(s *server.Session) {
 	// is deliberately absent here (that would force char-at-a-time and contradict
 	// the line-mode password takeover below). From here we strip any IAC the client
 	// sends so it never lands in captured input.
-	s.WriteBytes([]byte{
+	s.WriteBytesRaw([]byte{
 		iac, do, optTType,
 		iac, do, optTSpeed,
 		iac, do, optXDisploc,
@@ -94,7 +98,17 @@ func (t *Protocol) Handle(s *server.Session) {
 		iac, will, optSGA,
 		iac, do, optNaws,
 	})
-	s.ReplaceReader(&iacReader{src: s.Conn(), respond: func(b []byte) { s.WriteBytes(b) }})
+	// Record what the attacker types, not the telnet framing around it: stop the raw
+	// input tee, strip IAC through the reader (chained onto the current buffered
+	// reader so any bytes a PROXY-header parse read ahead are kept), and tee the
+	// cleaned bytes into the recorder. Negotiation replies go straight to the wire so
+	// they stay out of the cast too.
+	s.RecordInputDecoded()
+	s.ReplaceReader(&iacReader{
+		src:     s.Reader(),
+		respond: func(b []byte) { s.WriteBytesRaw(b) },
+		record:  s.RecordInput,
+	})
 
 	if t.style == "cisco" {
 		t.cisco(s)
@@ -114,9 +128,9 @@ func (t *Protocol) Handle(s *server.Session) {
 		s.Username = user
 
 		// Take over echo so the password is not shown, then return it to the client.
-		s.WriteBytes([]byte{iac, will, optEcho})
+		s.WriteBytesRaw([]byte{iac, will, optEcho})
 		pass, ok := s.Prompt("Password: ")
-		s.WriteBytes([]byte{iac, wont, optEcho})
+		s.WriteBytesRaw([]byte{iac, wont, optEcho})
 		if !ok {
 			return // client vanished mid-password: no phantom credential, no shell
 		}
@@ -199,9 +213,9 @@ func (t *Protocol) cisco(s *server.Session) {
 	if !ok {
 		return
 	}
-	s.WriteBytes([]byte{iac, will, optEcho})
+	s.WriteBytesRaw([]byte{iac, will, optEcho})
 	pass, ok := s.Prompt("Password: ")
-	s.WriteBytes([]byte{iac, wont, optEcho})
+	s.WriteBytesRaw([]byte{iac, wont, optEcho})
 	if !ok {
 		return // client vanished mid-password: no phantom credential
 	}
@@ -239,11 +253,28 @@ func (t *Protocol) cisco(s *server.Session) {
 
 // iacReader filters telnet IAC sequences out of the client byte stream so the
 // shell sees clean input. IAC IAC becomes a literal 0xFF; option triplets and
-// subnegotiations are consumed.
+// subnegotiations are consumed. A telnet client ends a line with CR followed by LF
+// or NUL (BSD/macOS telnet sends CR NUL for Enter by default), so the reader treats
+// CR as the line terminator and swallows the byte that pairs it; a bare NUL is a
+// no-op and is dropped. Without this an interactive client's Enter never reaches the
+// shell and the login prompt just accumulates carriage returns.
 type iacReader struct {
 	src     io.Reader
 	one     [1]byte
 	respond func([]byte) // sends a negotiation reply back to the client, if set
+	record  func([]byte) // tees the cleaned (post-IAC-strip) input into the recorder, if set
+	sawCR   bool         // last emitted byte was a CR turned into a newline; swallow a paired LF or NUL
+}
+
+// Read strips telnet framing and, when a recorder is attached, tees the cleaned
+// bytes it hands to the shell, so the cast shows keystrokes rather than the IAC
+// option negotiation that surrounds them on the wire.
+func (r *iacReader) Read(p []byte) (int, error) {
+	n, err := r.read(p)
+	if n > 0 && r.record != nil {
+		r.record(p[:n])
+	}
+	return n, err
 }
 
 // negotiate answers a client option request the way a real telnetd does, rather
@@ -280,7 +311,7 @@ func (r *iacReader) readByte() (byte, error) {
 	return r.one[0], err
 }
 
-func (r *iacReader) Read(p []byte) (int, error) {
+func (r *iacReader) read(p []byte) (int, error) {
 	n := 0
 	negs := 0
 	for n < len(p) {
@@ -290,6 +321,15 @@ func (r *iacReader) Read(p []byte) (int, error) {
 				return n, nil
 			}
 			return 0, err
+		}
+		// A CR just ended a line and was turned into a newline; telnet pairs it with
+		// LF or NUL, so swallow whichever follows rather than start the next line with
+		// a stray character. Any other byte is real input and falls through.
+		if r.sawCR {
+			r.sawCR = false
+			if b == '\n' || b == 0 {
+				continue
+			}
 		}
 		if b == iac {
 			c, err := r.readByte()
@@ -341,10 +381,25 @@ func (r *iacReader) Read(p []byte) (int, error) {
 			}
 			continue
 		}
-		p[n] = b
-		n++
-		if b == '\n' {
+		switch b {
+		case '\r':
+			// The line terminator for a real telnet client. Hand the shell a clean
+			// newline and remember the CR so the LF or NUL that pairs it is swallowed.
+			p[n] = '\n'
+			n++
+			r.sawCR = true
 			return n, nil
+		case '\n':
+			p[n] = '\n'
+			n++
+			return n, nil
+		case 0:
+			// Bare NUL is a telnet NVT no-op; drop it so it never reaches the shell as
+			// a phantom byte or lands in captured input.
+			continue
+		default:
+			p[n] = b
+			n++
 		}
 	}
 	return n, nil
