@@ -487,6 +487,12 @@ if(curView==='sources'||curView==='recon'||NOTABLE[e.event])scheduleOverview();
 if(curView==='honeytokens'&&e.event==='HONEYTOKEN')loadHoneytokens();
 if(curView==='payloads'&&e.event==='DOWNLOAD_ATTEMPT')loadPayloads();
 if(e.event==='SESSION_END')loadRecordings();
+// Update the live rail the instant an event streams, from the event's own data, so
+// a new session pops in immediately rather than waiting on the poll; scheduleActive
+// then reconciles with the backend (country, ISP, verdict, recorded flag).
+if(e.event==='SESSION_START')addActiveOptimistic(e);
+else if(e.event==='SESSION_END')removeActiveSession(e.session);
+else if(e.event==='COMMAND')bumpActiveCmds(e.session);
 if(e.event==='SESSION_START'||e.event==='SESSION_END')scheduleActive();
 if(detailIP&&srcOf(e)===detailIP)scheduleDetailRefresh();
 }
@@ -1017,6 +1023,24 @@ fetch('/dashboard/sessions/active',{credentials:'same-origin'})
 .then(function(r){return r.json();})
 .then(function(d){activeSessions=d.sessions||[];renderLiveRail();})
 .catch(function(){});
+}
+// Optimistic rail edits from streamed events, so the list reacts instantly; the next
+// loadActive reconciles the details the event alone does not carry.
+function addActiveOptimistic(e){
+var id=e.session;if(!id)return;
+for(var i=0;i<activeSessions.length;i++)if(activeSessions[i].id===id)return;
+var t=e.epoch_ms||Date.now();
+activeSessions.unshift({id:id,ip:srcOf(e),protocol:e.protocol||'',country:'',org:'',started_ms:t,last_seen_ms:t,commands:0,recorded:true});
+renderLiveRail();
+}
+function removeActiveSession(id){
+if(!id)return;var n=activeSessions.length;
+activeSessions=activeSessions.filter(function(s){return s.id!==id;});
+if(activeSessions.length!==n)renderLiveRail();
+}
+function bumpActiveCmds(id){
+if(!id)return;
+for(var i=0;i<activeSessions.length;i++)if(activeSessions[i].id===id){activeSessions[i].commands++;activeSessions[i].last_seen_ms=Date.now();renderLiveRail();return;}
 }
 function renderLiveRail(){
 var n=activeSessions.length;
