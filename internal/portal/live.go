@@ -22,6 +22,7 @@ type liveSession struct {
 	IP         string `json:"ip"`
 	Protocol   string `json:"protocol,omitempty"`
 	Country    string `json:"country,omitempty"`
+	Org        string `json:"org,omitempty"`
 	StartedMs  int64  `json:"started_ms"`
 	LastSeenMs int64  `json:"last_seen_ms"`
 	Commands   int    `json:"commands"`
@@ -112,7 +113,9 @@ func (p *Portal) activeSessions(w http.ResponseWriter, _ *http.Request) {
 			Commands: a.cmds, Recorded: recorded[id],
 		}
 		if p.geo != nil && a.ip != "" {
-			ls.Country = p.geo.Locate(a.ip).Country
+			loc := p.geo.Locate(a.ip)
+			ls.Country = loc.Country
+			ls.Org = loc.Org
 		}
 		out = append(out, ls)
 	}

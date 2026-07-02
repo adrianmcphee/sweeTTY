@@ -183,6 +183,11 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .replaybox.live{border-color:rgba(239,68,68,.5)}
 @keyframes lpulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}70%{box-shadow:0 0 0 7px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
 .replayfoot{padding:8px 15px;border-top:1px solid var(--bd);font-size:11px;color:var(--mut2);font-family:var(--mono);min-height:15px;display:flex;align-items:center;gap:12px}
+#term .ti{color:#4ade80}
+.termph{color:var(--mut2);font-style:italic;opacity:.7}
+.replayfoot .sinfo{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.replayfoot .schip{padding:1px 7px;border-radius:999px;background:var(--panel2);border:1px solid var(--bd);color:var(--mut);font-size:10.5px;white-space:nowrap}
+.replayfoot .sst{color:#f87171}
 .replayfoot .cur{display:none;width:7px;height:13px;background:#22c55e;vertical-align:middle}
 .replayfoot.live .cur{display:inline-block;animation:blink 1.05s step-end infinite}
 @keyframes blink{50%{opacity:0}}
@@ -922,23 +927,26 @@ document.getElementById('replay_kind').textContent=kind;
 termEl.textContent='';
 replayEl.classList.add('open');
 }
-function appendTerm(d){
+function appendTerm(d,input){
+var t=cleanTerm(d);if(!t)return false;
 var atBottom=termEl.scrollHeight-termEl.scrollTop-termEl.clientHeight<40;
-termEl.textContent+=cleanTerm(d);
+if(input){var sp=document.createElement('span');sp.className='ti';sp.textContent=t;termEl.appendChild(sp);}
+else termEl.appendChild(document.createTextNode(t));
 if(atBottom)termEl.scrollTop=termEl.scrollHeight;
+return true;
 }
-
 function cleanTerm(s){
 s=s.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g,'');
 s=s.replace(/\x1b[\(\)][AB0-9]/g,'');
 s=s.replace(/\x1b[=>NM]/g,'');
-return s.replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'');
+// C0 controls, DEL, and U+FFFD (the telnet IAC negotiation bytes decode to this)
+return s.replace(/[\x00-\x08\x0b-\x1f\x7f\uFFFD]/g,'');
 }
 function parseCast(text){
 var out=[],lines=text.split('\n');
 for(var i=1;i<lines.length;i++){
 var ln=lines[i];if(!ln)continue;
-try{var a=JSON.parse(ln);if(a&&a.length===3&&a[1]==='o')out.push({t:a[0],d:a[2]});}catch(e){}
+try{var a=JSON.parse(ln);if(a&&a.length===3&&(a[1]==='o'||a[1]==='i'))out.push({t:a[0],d:a[2],inp:a[1]==='i'});}catch(e){}
 }
 return out;
 }
@@ -956,31 +964,43 @@ replayActive=true;
 var i=0;
 function step(){
 if(!replayActive||i>=frames.length)return;
-appendTerm(frames[i].d);
+appendTerm(frames[i].d,frames[i].inp);
 var gap=i+1<frames.length?Math.min(frames[i+1].t-frames[i].t,1.2):0;
 i++;
 setTimeout(step,Math.max(gap*1000/1.6,8));
 }
 step();
 }
-function watchLive(id,ip){
+function schip(box,txt){if(txt){box.appendChild(el('span','schip',txt));}}
+function watchLive(s){
+var id=s.id;
 openTheater(id,'Watching live');
 replayBox.classList.add('live');
 document.getElementById('replay_live').classList.add('on');
 document.getElementById('replay_meta').textContent='real time';
 var foot=document.getElementById('replay_foot');
 foot.classList.add('live');foot.textContent='';
-if(ip)foot.appendChild(el('span',null,'source '+ip));
-var st=el('span',null,'connecting...');foot.appendChild(st);
+var info=el('span','sinfo','');foot.appendChild(info);
+schip(info,s.ip);schip(info,s.country);schip(info,s.org);
+if(s.protocol)schip(info,String(s.protocol).toUpperCase());
+var st=el('span','sst',' connecting');foot.appendChild(st);
 foot.appendChild(el('span','cur',''));
+// enrich with the source profile: assessed kind and visit history
+fetch('/dashboard/ip/'+encodeURIComponent(s.ip),{credentials:'same-origin'})
+.then(function(r){return r.json();})
+.then(function(d){var p=d.profile||{};if(p.kind&&p.kind!=='unknown')schip(info,p.kind);
+var v=(p.visits||[]).length;if(v>1)schip(info,v+' visits'+(p.returning?' • returning':''));else schip(info,'first visit');}).catch(function(){});
+var got=false;
+var ph=el('div','termph','waiting for terminal activity');termEl.appendChild(ph);
+var phT=setTimeout(function(){if(!got)ph.textContent='connected. this source has not been shown or typed anything yet.';},1600);
 replayActive=true;
 var es=new EventSource('/dashboard/watch/'+encodeURIComponent(id));
 liveES=es;
 es.addEventListener('frame',function(ev){
-st.textContent='live';
-try{var a=JSON.parse(ev.data);if(a&&a.length===3&&a[1]==='o')appendTerm(a[2]);}catch(e){}
+st.textContent=' live';
+try{var a=JSON.parse(ev.data);if(a&&a.length===3&&(a[1]==='o'||a[1]==='i')){if(appendTerm(a[2],a[1]==='i')&&!got){got=true;if(ph.parentNode)ph.parentNode.removeChild(ph);clearTimeout(phT);}}}catch(e){}
 });
-es.onerror=function(){st.textContent='stream ended';};
+es.onerror=function(){st.textContent=' stream ended';};
 }
 
 // --- live sessions rail ---------------------------------------------------
@@ -1019,7 +1039,7 @@ if(s.protocol)meta.appendChild(el('span',null,String(s.protocol).toUpperCase()))
 card.appendChild(meta);
 if(s.recorded){
 var btn=el('div','lc_watch');var ic=el('span',null,'');setIcon(ic,'live');btn.appendChild(ic);btn.appendChild(el('span',null,'Watch live'));
-btn.addEventListener('click',function(){watchLive(s.id,s.ip);});
+btn.addEventListener('click',function(){watchLive(s);});
 card.appendChild(btn);
 }else{
 card.appendChild(el('div','lc_meta muted','session recording is off'));
@@ -1271,7 +1291,7 @@ setTimeout(function(){sp.classList.add('gone');sp.innerHTML='';},560);
 function showSplash(){
 var sp=document.getElementById('splash');if(!sp)return;
 sp.addEventListener('click',dismissSplash);
-setTimeout(dismissSplash,5000); // safety: never let a stalled fetch trap the UI
+setTimeout(dismissSplash,3500); // safety: never let a stalled fetch trap the UI
 fetch('/dashboard/jt-splash',{credentials:'same-origin'})
 .then(function(r){return r.json();})
 .then(function(d){if(d&&d.rows)runSplashAnim(d);else dismissSplash();})
@@ -1299,7 +1319,7 @@ var a1=Math.random()*TAU,r1=reach*(0.55+Math.random()*0.8);SX[n]=W/2+Math.cos(a1
 var a2=Math.random()*TAU,r2=reach*(0.7+Math.random()*0.9);EDX[n]=Math.cos(a2)*r2;EDY[n]=Math.sin(a2)*r2;
 DLY[n]=Math.random();x++;n++;
 }}}
-var ASM=1000,HOLD=700,EXIT=850,t0=null;
+var ASM=700,HOLD=490,EXIT=595,t0=null;
 function ease(t){return t<0?0:t>1?1:t*t*(3-2*t);}
 var cap=document.getElementById('splash_cap');
 function frame(ts){
