@@ -42,6 +42,7 @@ type Shell struct {
 	execDepth int       // re-entry depth for sh -c / base64-decoded commands
 	cron      string    // crontab installed this session, so crontab -l echoes what -e/<file> set
 	login     time.Time // when this session logged in, so w/who/last/ps show it live from the real source
+	hist      []string  // commands run this session, appended to ~/.bash_history for `history`
 	// capture, when non-nil, receives command output instead of the terminal, so
 	// $(...) and backticks can run a sub-command and read back its stdout.
 	capture *strings.Builder
@@ -192,6 +193,9 @@ func (sh *Shell) loop() {
 		}
 		sh.s.CmdCount++
 		sh.s.LogCommand(line)
+		if len(sh.hist) < 5000 { // bound a very long session's in-memory history
+			sh.hist = append(sh.hist, line)
+		}
 		sh.runLine(line)
 	}
 }
@@ -938,10 +942,9 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 	case "false":
 		return "", 1
 	case "sudo":
-		if len(args) > 1 {
-			return sh.runCommand(args[1:], stdin)
-		}
-		return "", 0
+		return sh.cmdSudo(args, stdin)
+	case "su":
+		return sh.cmdSu(args)
 	case "base64":
 		return sh.cmdBase64(args, stdin)
 	case "cut":

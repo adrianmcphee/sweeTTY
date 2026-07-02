@@ -221,6 +221,11 @@ func (sh *Shell) cmdCat(args []string) (string, int) {
 			code = 1
 			continue
 		}
+		if !sh.canRead(n) {
+			b.WriteString("cat: " + f + ": Permission denied\n")
+			code = 1
+			continue
+		}
 		if sh.isLootImage(abs) {
 			// catting a bait image dumps the colour-ANSI reveal straight to the
 			// terminal — the payoff for whoever followed the trail to the stash.
@@ -747,20 +752,24 @@ func (sh *Shell) cmdMutate(args []string) (string, int) {
 	return "", 0
 }
 
+// cmdHistory renders the in-memory shell history the way bash does: the lines
+// loaded from ~/.bash_history at login, followed by the commands run this session.
+// Reading the same ~/.bash_history file gives the identical prefix, so `history`
+// and `cat ~/.bash_history` agree instead of being two unrelated canned lists.
 func (sh *Shell) cmdHistory(args []string) (string, int) {
 	if len(args) > 1 && args[1] == "-c" {
 		sh.s.LogCommandNote("history -c", "anti-forensics")
+		sh.hist = nil
 		return "", 0
 	}
-	lines := []string{
-		"ls -la /var/www/html", "cat /var/www/html/wp-config.php",
-		"mysql -u " + sh.p.WPDBUser + " -p -h " + sh.p.DBIP + " " + sh.p.WPDBName,
-		"systemctl status nginx", "df -h", "cd /home/" + sh.p.Username + "/scripts",
-		"./backup.sh", "ssh " + sh.p.Username + "@" + sh.p.BackupIP, "free -m", "history",
+	var all []string
+	if data, err := sh.fs.ReadFile(sh.env["HOME"] + "/.bash_history"); err == nil {
+		all = append(all, lines(string(data))...)
 	}
+	all = append(all, sh.hist...)
 	var b strings.Builder
-	for i, l := range lines {
-		b.WriteString(fmt.Sprintf("%5d  %s\n", i+1, l))
+	for i, l := range all {
+		fmt.Fprintf(&b, "%5d  %s\n", i+1, l)
 	}
 	return b.String(), 0
 }
