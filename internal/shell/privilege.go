@@ -42,7 +42,7 @@ func (sh *Shell) cmdSudo(args []string, stdin string) (string, int) {
 done:
 	cmd := args[i:]
 	if sh.user != "root" {
-		if pass, ok := sh.s.Prompt("[sudo] password for " + sh.user + ": "); ok {
+		if pass, ok := sh.s.ReadPassword("[sudo] password for " + sh.user + ": "); ok {
 			sh.s.LogCredential("sudo:"+sh.user, pass)
 		}
 	}
@@ -70,7 +70,7 @@ func (sh *Shell) cmdSu(args []string) (string, int) {
 		break
 	}
 	if sh.user != target {
-		if pass, ok := sh.s.Prompt("Password: "); ok {
+		if pass, ok := sh.s.ReadPassword("Password: "); ok {
 			sh.s.LogCredential("su:"+target, pass)
 		}
 	}

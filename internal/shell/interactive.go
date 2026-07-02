@@ -325,7 +325,7 @@ func (sh *Shell) iSSH(args []string) int {
 		return 255
 	}
 	sh.s.Writeln("Warning: Permanently added '" + host + "' (ED25519) to the list of known hosts.")
-	pass, _ := sh.s.Prompt(user + "@" + host + "'s password: ")
+	pass, _ := sh.s.ReadPassword(user + "@" + host + "'s password: ")
 	sh.s.Writeln("")
 	sh.s.LogCredential(user, pass)
 	if sh.pivot != nil {
@@ -373,7 +373,7 @@ func (sh *Shell) iScp(args []string) int {
 		host = remote[at+1:]
 	}
 	host = strings.SplitN(host, ":", 2)[0]
-	pass, _ := sh.s.Prompt(remoteUser(remote, sh.user) + "@" + host + "'s password: ")
+	pass, _ := sh.s.ReadPassword(remoteUser(remote, sh.user) + "@" + host + "'s password: ")
 	sh.s.LogCredential("scp:"+host, pass)
 	sh.s.LogCommandNote("scp "+local+" -> "+remote, "exfil")
 	sh.pause(900 * time.Millisecond)
@@ -404,7 +404,7 @@ func (sh *Shell) iRsync(args []string) int {
 			host = remote[at+1:]
 		}
 		host = strings.SplitN(host, ":", 2)[0]
-		pass, _ := sh.s.Prompt(remoteUser(remote, sh.user) + "@" + host + "'s password: ")
+		pass, _ := sh.s.ReadPassword(remoteUser(remote, sh.user) + "@" + host + "'s password: ")
 		sh.s.LogCredential("rsync:"+host, pass)
 		sh.s.LogCommandNote("rsync "+local+" -> "+remote, "exfil")
 	}
@@ -606,7 +606,7 @@ func (sh *Shell) iSu(args []string) int {
 			break
 		}
 	}
-	pass, _ := sh.s.Prompt("Password: ")
+	pass, _ := sh.s.ReadPassword("Password: ")
 	sh.s.LogCredential(target, pass)
 	sh.pause(time.Second)
 	return 0
@@ -850,10 +850,10 @@ func (sh *Shell) iPasswd(args []string) int {
 		user = args[1]
 	}
 	sh.s.Writeln("Changing password for " + user + ".")
-	cur, _ := sh.s.Prompt("Current password: ")
+	cur, _ := sh.s.ReadPassword("Current password: ")
 	sh.s.LogCredential(user, cur)
-	n1, _ := sh.s.Prompt("New password: ")
-	n2, _ := sh.s.Prompt("Retype new password: ")
+	n1, _ := sh.s.ReadPassword("New password: ")
+	n2, _ := sh.s.ReadPassword("Retype new password: ")
 	sh.s.LogCommandNote("passwd new="+n1+" retype="+n2, "password-change")
 	sh.pause(time.Second)
 	sh.s.Writeln("passwd: password updated successfully")
@@ -1031,7 +1031,7 @@ func (sh *Shell) iMysql(args []string) int {
 		}
 	}
 	if hasFlag(args, "-p") {
-		pass, _ := sh.s.Prompt("Enter password: ")
+		pass, _ := sh.s.ReadPassword("Enter password: ")
 		sh.s.LogCredential("mysql", pass)
 	}
 	sh.pause(time.Second)
