@@ -937,8 +937,23 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 		return "", 0
 	case "base64":
 		return sh.cmdBase64(args, stdin)
-	case "cut", "sort", "uniq", "tr", "awk", "sed", "tee", "xargs":
-		// minimal stdin passthroughs so pipes do not break
+	case "cut":
+		return sh.cmdCut(args, stdin), 0
+	case "sort":
+		return sh.cmdSort(args, stdin), 0
+	case "uniq":
+		return sh.cmdUniq(args, stdin), 0
+	case "tr":
+		return sh.cmdTr(args, stdin), 0
+	case "awk", "gawk", "mawk":
+		return sh.cmdAwk(args, stdin), 0
+	case "sed":
+		return sh.cmdSed(args, stdin), 0
+	case "tee":
+		return sh.cmdTee(args, stdin), 0
+	case "xargs":
+		// xargs builds and runs a command from stdin; running nothing, it passes the
+		// input on so a pipe does not break, and the intent is already logged upstream.
 		return stdin, 0
 	default:
 		if strings.HasPrefix(base, "./") || strings.HasPrefix(base, "/") {
