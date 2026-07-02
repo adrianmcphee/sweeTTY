@@ -20,6 +20,7 @@ package ssh
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -94,6 +95,13 @@ func (pr *Protocol) Name() string { return "ssh" }
 // ClientFirst is false: an SSH server sends its identification string first.
 func (pr *Protocol) ClientFirst() bool { return false }
 
+// DecodesInput reports that the SSH service records its own input: handshake
+// bytes stay out of the cast entirely, and after Rebind the decrypted channel IO
+// is teed by the session. Without this the server would raw-tee pre-handshake
+// read-ahead (a client banner the PROXY-header parse buffered) into the cast as
+// if the attacker had typed it.
+func (pr *Protocol) DecodesInput() bool { return true }
+
 // Handle completes the SSH handshake, authenticates against the persona, and serves
 // the shell over each session channel.
 func (pr *Protocol) Handle(s *server.Session) {
@@ -159,13 +167,24 @@ func (pr *Protocol) Handle(s *server.Session) {
 
 	// Deadline the handshake on the bare conn: gossh reads the client banner and
 	// runs key exchange here with no read deadline of its own, so an idle or
-	// dribbling client would otherwise pin this goroutine forever.
-	raw := s.RawConn()
+	// dribbling client would otherwise pin this goroutine forever. HandshakeConn,
+	// not RawConn: behind an HAProxy edge the PROXY-header parse can pull the
+	// client's banner into the session reader, and a handshake on the bare socket
+	// would never see it and close every connection that raced the parse.
+	raw := s.HandshakeConn()
 	raw.SetDeadline(time.Now().Add(handshakeTimeout))
 	sshConn, chans, reqs, err := gossh.NewServerConn(raw, cfg)
 	if err != nil {
 		// Handshake closed or every auth attempt failed. Credentials are already
-		// logged in the callbacks; the library has closed the connection.
+		// logged in the callbacks; the library has closed the connection. A clean
+		// disconnect (EOF: a banner-grab probe) and a failed login are routine, but
+		// any other mid-handshake death is worth a note: it is either a
+		// fingerprinting probe or a serving bug, and without this the event stream
+		// shows only an empty session with nothing to diagnose by.
+		var authErr *gossh.ServerAuthError
+		if !errors.Is(err, io.EOF) && !errors.As(err, &authErr) {
+			s.LogRaw("SSH_NOTE", "handshake failed: "+err.Error())
+		}
 		return
 	}
 	defer sshConn.Close()

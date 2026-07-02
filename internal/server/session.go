@@ -102,6 +102,40 @@ func (s *Session) RawConn() net.Conn {
 	return s.conn
 }
 
+// HandshakeConn returns the transport for a protocol that runs its own wire
+// handshake (SSH). Like RawConn it unwraps the session recorder, but it also
+// replays any bytes an earlier read pulled into the session reader: behind an
+// HAProxy edge the PROXY-header parse fills the buffer with whatever has already
+// arrived, which includes the client's first protocol bytes whenever the client
+// raced the parse. A handshake reading the bare socket would never see those
+// bytes and would fail on a desynced first packet.
+func (s *Session) HandshakeConn() net.Conn {
+	raw := s.RawConn()
+	n := s.reader.Buffered()
+	if n == 0 {
+		return raw
+	}
+	pre := make([]byte, n)
+	io.ReadFull(s.reader, pre) // only drains the buffer; cannot block or fail
+	return &replayConn{Conn: raw, pre: pre}
+}
+
+// replayConn hands a handshake the bytes a pre-handshake read already buffered,
+// then reads from the socket as usual.
+type replayConn struct {
+	net.Conn
+	pre []byte
+}
+
+func (c *replayConn) Read(b []byte) (int, error) {
+	if len(c.pre) > 0 {
+		n := copy(b, c.pre)
+		c.pre = c.pre[n:]
+		return n, nil
+	}
+	return c.Conn.Read(b)
+}
+
 // Rebind redirects every session IO helper onto rw, an SSH channel established
 // after the handshake, so the existing shell engine (written against the line-based
 // Session helpers) runs unchanged over SSH. Reads and writes flow over the channel;

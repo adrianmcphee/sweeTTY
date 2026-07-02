@@ -109,6 +109,7 @@ network, executing attacker input, or writing to the host disk.
 - **Wrong password and unknown user are rejected**. _internal/proto/ssh: TestWrongPasswordRejected, TestUnknownUserRejected_
 - **An offered public key is recorded as a credential attempt (with its fingerprint), not a command**, so a pubkey-spray bot that never gets a shell does not inflate command counts or falsely reach the post-login phase. _internal/proto/ssh: TestPublicKeyOfferLoggedAsCredentialNotCommand_
 - **Cooked-TTY line discipline edits and terminates lines, swallows CRLF, and ends on Ctrl-D**. _internal/proto/ssh: TestCookedTTYEditsAndTerminatesLines, TestCookedTTYSwallowsCRLF, TestCookedTTYCtrlDEndsSession_
+- **The handshake survives a PROXY header glued to the client banner**: bytes the header parse buffered are replayed into the key exchange rather than dropped, so a client that races the parse behind the HAProxy edge is not disconnected mid-kex. _internal/proto/ssh: TestHandshakeSurvivesProxyHeaderReadAhead_
 
 ## HTTP, HTTPS, FTP
 
