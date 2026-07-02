@@ -633,8 +633,8 @@ func (sh *Shell) cmdStat(args []string) (string, int) {
 		} else if n.IsLink() {
 			typ = "symbolic link"
 		}
-		out = append(out, fmt.Sprintf("  File: %s\n  Size: %-10d Blocks: %-8d IO Block: 4096   %s\nDevice: 801h/2049d\tInode: %-11d Links: %d\nAccess: (%04o/%s)  Uid: (%5d/%8s)   Gid: (%5d/%8s)\nModify: %s",
-			a, n.Size(), (n.Size()+511)/512, typ, fakeInode(abs), n.LinkCount(), n.Mode().Perm(), n.Mode().String(), n.Uid(), n.Uname(), n.Gid(), n.Gname(), n.Mtime().Format("2006-01-02 15:04:05.000000000 -0700")))
+		out = append(out, fmt.Sprintf("  File: %s\n  Size: %-10d Blocks: %-8d IO Block: 4096   %s\nDevice: %s\tInode: %-11d Links: %d\nAccess: (%04o/%s)  Uid: (%5d/%8s)   Gid: (%5d/%8s)\nModify: %s",
+			a, n.Size(), (n.Size()+511)/512, typ, deviceFor(sh.p, abs), fakeInode(abs), n.LinkCount(), n.Mode().Perm(), n.Mode().String(), n.Uid(), n.Uname(), n.Gid(), n.Gname(), n.Mtime().Format("2006-01-02 15:04:05.000000000 -0700")))
 	}
 	return strings.Join(out, "\n") + "\n", code
 }
@@ -765,7 +765,7 @@ func (sh *Shell) cmdHistory(args []string) (string, int) {
 	return b.String(), 0
 }
 
-func (sh *Shell) cmdService(args []string) string {
+func (sh *Shell) cmdService(args []string) (string, int) {
 	name := ""
 	action := ""
 	for _, a := range args[1:] {
@@ -778,42 +778,57 @@ func (sh *Shell) cmdService(args []string) string {
 		}
 	}
 	if action == "status" || action == "" {
+		if name == "" {
+			return "", 0 // bare systemctl would list units; keep it quiet rather than wrong
+		}
 		return systemctlStatus(sh.p, name)
 	}
-	return ""
+	return "", 0
 }
 
 // systemctlStatus renders `systemctl status <name>`. Its Main PID is sourced from
 // the shared process table, so it can never name a different PID than `ps aux`
-// shows for the same daemon.
-func systemctlStatus(p *persona.Persona, name string) string {
+// shows for the same daemon; a name no process backs reports not-found with exit 4,
+// the way real systemctl does, instead of claiming every unit is running.
+func systemctlStatus(p *persona.Persona, name string) (string, int) {
+	pid, found := mainPID(p, name)
+	if !found {
+		return fmt.Sprintf("Unit %s.service could not be found.\n", strings.TrimSuffix(name, ".service")), 4
+	}
 	up := time.Since(time.Unix(p.BootEpoch, 0))
 	return fmt.Sprintf("● %s.service - %s\n     Loaded: loaded (/lib/systemd/system/%s.service; enabled; vendor preset: enabled)\n     Active: active (running) since boot; %s ago\n   Main PID: %d (%s)\n      Tasks: 3 (limit: 2294)\n     Memory: 12.4M\n",
-		name, name, name, fmtDur(up), mainPID(p, name), name)
+		name, name, name, fmtDur(up), pid, name), 0
 }
 
 // mainPID returns the master/daemon PID for a service name from the shared process
 // table (systemd's Main PID is the master row, not a worker), falling back to a
 // stable synthetic pid for a service the table does not model.
-func mainPID(p *persona.Persona, name string) int {
-	key := name
-	switch name {
+func mainPID(p *persona.Persona, name string) (int, bool) {
+	key := strings.TrimSuffix(name, ".service")
+	switch key {
 	case "mysql", "mysqld", "mariadb":
 		key = "mysqld"
 	case "ssh", "sshd":
 		key = "sshd"
 	case "php-fpm", "php", "php8.1-fpm":
 		key = "php-fpm"
+	case "cron", "crond":
+		key = "cron"
+	case "systemd-journald", "systemd-resolved", "systemd-networkd", "systemd-logind", "systemd-udevd", "rsyslog", "dbus", "nginx":
+		// real, running daemons in the process table; leave key as-is to match
+	}
+	if len(key) < 2 {
+		return 0, false
 	}
 	for _, r := range procTable(p) {
 		if strings.Contains(r.command, "worker") {
 			continue
 		}
 		if strings.Contains(r.command, key) {
-			return r.pid
+			return r.pid, true
 		}
 	}
-	return 600 + len(name)
+	return 0, false
 }
 
 func (sh *Shell) cmdDpkg(args []string) string {

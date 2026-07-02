@@ -908,7 +908,7 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 	case "dmesg":
 		return dmesgStr(sh.p), 0
 	case "systemctl", "service":
-		return sh.cmdService(args), 0
+		return sh.cmdService(args)
 	case "dpkg":
 		return sh.cmdDpkg(args), 0
 	case "sleep":

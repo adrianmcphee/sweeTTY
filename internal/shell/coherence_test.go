@@ -195,7 +195,11 @@ func TestSystemctlMainPidMatchesPs(t *testing.T) {
 	ps := psStr(p, true, time.Now())
 	pidRe := regexp.MustCompile(`Main PID:\s*(\d+)`)
 	for _, svc := range []string{"nginx", "mysql", "ssh"} {
-		status := systemctlStatus(p, svc)
+		status, code := systemctlStatus(p, svc)
+		if code != 0 {
+			t.Errorf("systemctl status %s should be a known running unit, got exit %d", svc, code)
+			continue
+		}
 		m := pidRe.FindStringSubmatch(status)
 		if m == nil {
 			t.Errorf("systemctl status %s has no Main PID:\n%s", svc, status)

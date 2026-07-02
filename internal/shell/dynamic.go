@@ -3,6 +3,7 @@ package shell
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,36 @@ import (
 
 func uptimeOf(p *persona.Persona) time.Duration {
 	return time.Since(time.Unix(p.BootEpoch, 0))
+}
+
+// deviceFor returns the stat Device field (hex/dec of st_dev) for the mount a path
+// falls under, so stat agrees with lsblk and df instead of always naming sda1.
+func deviceFor(p *persona.Persona, abs string) string {
+	major, minor := 202, 1 // xvda1, the cloud root
+	switch {
+	case p.Embedded():
+		major, minor = 179, 1 // mmcblk0p1
+	case strings.HasPrefix(abs, "/var/lib/mysql"):
+		major, minor = 202, 17 // xvdb1, the data volume
+	}
+	dev := major<<8 | minor
+	return fmt.Sprintf("%xh/%dd", dev, dev)
+}
+
+// linkLocalFromMAC derives the stable EUI-64 fe80:: address from the interface MAC
+// the way the kernel does, so ifconfig and ip addr show the same link-local and it
+// does not drift between calls (the old value was built from uptime and changed).
+func linkLocalFromMAC(mac string) string {
+	parts := strings.Split(mac, ":")
+	if len(parts) != 6 {
+		return "fe80::1"
+	}
+	b := make([]int64, 6)
+	for i, p := range parts {
+		b[i], _ = strconv.ParseInt(p, 16, 0)
+	}
+	b[0] ^= 0x02 // flip the universal/local bit
+	return fmt.Sprintf("fe80::%02x%02x:%02xff:fe%02x:%02x%02x", b[0], b[1], b[2], b[3], b[4], b[5])
 }
 
 func bcast(ip string) string {
@@ -290,7 +321,7 @@ func ifconfigStr(p *persona.Persona) string {
 	txb := int64(txp) * 690
 	return fmt.Sprintf(`eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
         inet %s  netmask 255.255.255.0  broadcast %s
-        inet6 fe80::%02x:%02xff:fe%02x:%02x  prefixlen 64  scopeid 0x20<link>
+        inet6 %s  prefixlen 64  scopeid 0x20<link>
         ether %s  txqueuelen 1000  (Ethernet)
         RX packets %d  bytes %d (%.1f MiB)
         RX errors 0  dropped 0  overruns 0  frame 0
@@ -304,7 +335,7 @@ lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
         RX packets %d  bytes %d (%.1f MiB)
         TX packets %d  bytes %d (%.1f MiB)
 `,
-		p.HostIP, bcast(p.HostIP), up&0xff, (up>>8)&0xff, up&0xff, (up>>4)&0xff, p.MAC,
+		p.HostIP, bcast(p.HostIP), linkLocalFromMAC(p.MAC), p.MAC,
 		rxp, rxb, float64(rxb)/1048576, txp, txb, float64(txb)/1048576,
 		up*3, int64(up)*3*98, float64(int64(up)*3*98)/1048576, up*3, int64(up)*3*98, float64(int64(up)*3*98)/1048576)
 }
@@ -318,7 +349,9 @@ func ipAddrStr(p *persona.Persona) string {
     link/ether %s brd ff:ff:ff:ff:ff:ff
     inet %s/24 brd %s scope global eth0
        valid_lft forever preferred_lft forever
-`, p.MAC, p.HostIP, bcast(p.HostIP))
+    inet6 %s/64 scope link
+       valid_lft forever preferred_lft forever
+`, p.MAC, p.HostIP, bcast(p.HostIP), linkLocalFromMAC(p.MAC))
 }
 
 func ipRouteStr(p *persona.Persona) string {
