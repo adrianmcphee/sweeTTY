@@ -43,19 +43,33 @@ func TestTelnetDeclinesClientOption(t *testing.T) {
 }
 
 // TestTelnetAcksItsOwnBurstSilently proves the server does NOT answer the
-// acknowledgements of the options it requested/offered in the opening burst:
-// WILL TTYPE (ack of our DO TTYPE) and DO SGA (ack of our WILL SGA) must draw no
-// reply, or the negotiation would contradict itself and could loop.
+// acknowledgement of an option it requested in the opening burst: WILL TTYPE (ack of
+// our DO TTYPE) must draw no reply, or the negotiation would contradict itself and
+// could loop.
 func TestTelnetAcksItsOwnBurstSilently(t *testing.T) {
 	h, _ := setup(t, "ubuntu")
 	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
 		t.Fatal("never saw login prompt")
 	}
 	h.SendBytes([]byte{0xff, 0xfb, 0x18}) // IAC WILL TTYPE (ack of our DO TTYPE)
-	h.SendBytes([]byte{0xff, 0xfd, 0x03}) // IAC DO SGA   (ack of our WILL SGA)
 	out := h.ReadFor(300 * time.Millisecond)
 	if strings.ContainsRune(out, 0xff) {
 		t.Fatalf("server answered an ack of its own burst option (can loop/contradict): % x", []byte(out))
+	}
+}
+
+// TestTelnetRefusesSGA proves the server refuses suppress-go-ahead (DO SGA -> WONT
+// SGA). It stays in line mode on purpose: offering SGA without ECHO is what drops a
+// BSD/macOS client into kludge line mode and echoes a stray ^M at the prompt.
+func TestTelnetRefusesSGA(t *testing.T) {
+	h, _ := setup(t, "ubuntu")
+	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
+		t.Fatal("never saw login prompt")
+	}
+	h.SendBytes([]byte{0xff, 0xfd, 0x03}) // IAC DO SGA
+	out := h.ReadFor(300 * time.Millisecond)
+	if !strings.Contains(out, "\xff\xfc\x03") { // IAC WONT SGA
+		t.Fatalf("server did not refuse SGA with WONT SGA; got % x", []byte(out))
 	}
 }
 

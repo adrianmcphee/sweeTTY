@@ -54,7 +54,6 @@ const (
 	dont = 0xfe
 
 	optEcho       = 0x01
-	optSGA        = 0x03
 	optTType      = 0x18
 	optNaws       = 0x1f
 	optTSpeed     = 0x20
@@ -81,21 +80,42 @@ func (t *Protocol) ClientFirst() bool { return false }
 // records the cleaned keystrokes itself, so the server must not raw-tee the wire.
 func (t *Protocol) DecodesInput() bool { return true }
 
+// telnetEcho drives echo suppression for a password prompt in line mode. The client
+// normally does its own local echo; sending IAC WILL ECHO makes it stop and hand echo
+// to the server, which then echoes nothing, so the password is hidden. Releasing it
+// (IAC WONT ECHO) returns the client to local echo, and since neither side echoed the
+// Enter that ended the hidden line, a newline is written so the cursor advances.
+type telnetEcho struct {
+	s          *server.Session
+	suppressed bool
+}
+
+func (e *telnetEcho) SetEcho(on bool) {
+	switch {
+	case !on && !e.suppressed:
+		e.s.WriteBytesRaw([]byte{iac, will, optEcho})
+		e.suppressed = true
+	case on && e.suppressed:
+		e.s.WriteBytesRaw([]byte{iac, wont, optEcho})
+		e.s.Write("\r\n")
+		e.suppressed = false
+	}
+}
+
 func (t *Protocol) Handle(s *server.Session) {
 	s.Persona = t.p
-	// Open with a burst like a real netkit/inetutils telnetd: query the client for
-	// its terminal type, speed, X display and environment, offer to suppress
-	// go-ahead, and ask for the window size. A lone DO NAWS is a near-unique
-	// honeypot tell. The server still drives ECHO itself around the password, so it
-	// is deliberately absent here (that would force char-at-a-time and contradict
-	// the line-mode password takeover below). From here we strip any IAC the client
-	// sends so it never lands in captured input.
+	// Open with a burst like a real netkit/inetutils telnetd: query the client for its
+	// terminal type, speed, X display and environment, and its window size. Stay in
+	// line mode: the client does its own local echo and editing, so the server never
+	// echoes during a read (which would deadlock its single-goroutine IO). Crucially it
+	// does NOT offer SGA, because offering suppress-go-ahead without also driving ECHO
+	// drops a BSD/macOS client into "kludge line mode", where Enter echoes a stray ^M
+	// at the prompt. The server takes over ECHO only briefly, around a password.
 	s.WriteBytesRaw([]byte{
 		iac, do, optTType,
 		iac, do, optTSpeed,
 		iac, do, optXDisploc,
 		iac, do, optNewEnviron,
-		iac, will, optSGA,
 		iac, do, optNaws,
 	})
 	// Record what the attacker types, not the telnet framing around it: stop the raw
@@ -109,6 +129,9 @@ func (t *Protocol) Handle(s *server.Session) {
 		respond: func(b []byte) { s.WriteBytesRaw(b) },
 		record:  s.RecordInput,
 	})
+	// Drive echo suppression around every password prompt, in the shell as well as at
+	// login, through the standard IAC ECHO takeover.
+	s.SetEchoController(&telnetEcho{s: s})
 
 	if t.style == "cisco" {
 		t.cisco(s)
@@ -127,14 +150,12 @@ func (t *Protocol) Handle(s *server.Session) {
 		}
 		s.Username = user
 
-		// Take over echo so the password is not shown, then return it to the client.
-		s.WriteBytesRaw([]byte{iac, will, optEcho})
-		pass, ok := s.Prompt("Password: ")
-		s.WriteBytesRaw([]byte{iac, wont, optEcho})
+		// Suppress echo so the password is not shown (the controller drives the IAC
+		// takeover and advances the cursor after the hidden entry).
+		pass, ok := s.ReadPassword("Password: ")
 		if !ok {
 			return // client vanished mid-password: no phantom credential, no shell
 		}
-		s.Write("\r\n")
 
 		accepted, bruteForced := t.p.AcceptFrom(s.SrcIP, user, pass)
 		s.LogCredentialResult(user, pass, accepted, bruteForced)
@@ -213,13 +234,10 @@ func (t *Protocol) cisco(s *server.Session) {
 	if !ok {
 		return
 	}
-	s.WriteBytesRaw([]byte{iac, will, optEcho})
-	pass, ok := s.Prompt("Password: ")
-	s.WriteBytesRaw([]byte{iac, wont, optEcho})
+	pass, ok := s.ReadPassword("Password: ")
 	if !ok {
 		return // client vanished mid-password: no phantom credential
 	}
-	s.Write("\r\n")
 	s.LogCredential(strings.TrimSpace(user), pass)
 	if !server.FastMode() {
 		time.Sleep(util.RandomDelay(500, 1000))
@@ -280,18 +298,19 @@ func (r *iacReader) Read(p []byte) (int, error) {
 // negotiate answers a client option request the way a real telnetd does, rather
 // than swallowing it in silence (a near-unique honeypot tell). It mirrors the
 // opening burst: acknowledgements of options the server itself requested (DO TTYPE/
-// TSPEED/XDISPLOC/NEW-ENVIRON/NAWS) or offered (WILL SGA, plus ECHO which it drives
-// around the password) draw no reply — answering would contradict the request and
-// could loop — while every other DO is met with WONT and every other WILL with DONT.
+// TSPEED/XDISPLOC/NEW-ENVIRON/NAWS) draw no reply, since answering would contradict
+// the request and could loop, while every other DO is met with WONT and every other
+// WILL with DONT. ECHO is the one exception: the server drives it around a password,
+// so a client's DO ECHO is left unanswered rather than refused, or the refusal would
+// contradict the takeover. SGA is refused, keeping the client in clean line mode.
 func (r *iacReader) negotiate(cmd, opt byte) {
 	if r.respond == nil {
 		return
 	}
 	switch cmd {
 	case do:
-		// Acks of options the server itself offered (WILL) must not be answered.
-		if opt == optEcho || opt == optSGA {
-			return // the server drives ECHO and offered WILL SGA
+		if opt == optEcho {
+			return // the server drives ECHO itself around password prompts
 		}
 		r.respond([]byte{iac, wont, opt})
 	case will:

@@ -64,15 +64,17 @@ func TestIACNegotiationOnConnect(t *testing.T) {
 	h, p := setup(t, "ubuntu")
 	out := h.ReadFor(400 * time.Millisecond)
 	// Real telnetd opens with a burst, not a lone DO NAWS. Assert the burst carries
-	// DO NAWS, WILL SGA and at least one terminal-query DO (TTYPE), and that the
-	// opening contains several IAC option triplets — codifying "a burst, not one
-	// option" without pinning the exact build-dependent set.
+	// DO NAWS and terminal-query DOs (TTYPE, NEW-ENVIRON), and that the opening
+	// contains several IAC option triplets, codifying "a burst, not one option"
+	// without pinning the exact build-dependent set. It deliberately does NOT offer
+	// SGA: SGA without ECHO would put a client in kludge line mode (a stray ^M at the
+	// prompt), so the server stays in plain line mode.
 	for _, want := range []struct {
 		name  string
 		bytes string
 	}{
 		{"DO NAWS", "\xff\xfd\x1f"},
-		{"WILL SGA", "\xff\xfb\x03"},
+		{"DO NEW-ENVIRON", "\xff\xfd\x27"},
 		{"DO TTYPE", "\xff\xfd\x18"},
 	} {
 		if !strings.Contains(out, want.bytes) {
@@ -81,6 +83,11 @@ func TestIACNegotiationOnConnect(t *testing.T) {
 	}
 	if n := strings.Count(out, "\xff"); n < 4 {
 		t.Fatalf("opening negotiation is not a burst: only %d IAC bytes; got % x", n, out)
+	}
+	// The burst must NOT offer WILL SGA: SGA without ECHO is the kludge-line-mode
+	// trigger that echoes a stray ^M at the login prompt on a real client.
+	if strings.Contains(out, "\xff\xfb\x03") {
+		t.Fatalf("opening offers WILL SGA, which drops a client into kludge line mode; got % x", out)
 	}
 	// agetty prints "<hostname> login: ", not a bare "login: ".
 	if !strings.Contains(out, p.Hostname+" login: ") {
