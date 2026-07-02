@@ -26,6 +26,13 @@ import (
 //go:embed jt-prize.jpg
 var jtPrizeJPG []byte
 
+// jtSplashGz is the colour-ASCII JT boot splash, a compact colour-run render of the
+// libcaca portrait, stored gzipped and served with Content-Encoding: gzip so it
+// costs the binary and the wire ~21 KB rather than the ~770 KB it inflates to.
+//
+//go:embed jt-splash.html.gz
+var jtSplashGz []byte
+
 // maxConcurrentSSE bounds live event-stream subscribers so they cannot exhaust
 // file descriptors and goroutines. maxConcurrentWatch does the same for the live
 // session-watch streams, which tail a cast file each.
@@ -125,6 +132,7 @@ func (p *Portal) engine() http.Handler {
 	mux.HandleFunc("GET /dashboard/cast/{id}", p.cast)
 	mux.HandleFunc("GET /dashboard/watch/{id}", p.watch)
 	mux.HandleFunc("GET /dashboard/jt-prize.jpg", p.jtPrize)
+	mux.HandleFunc("GET /dashboard/jt-splash", p.jtSplash)
 	return recoverHandler(mux)
 }
 
@@ -173,6 +181,15 @@ func writeData(w http.ResponseWriter, status int, contentType string, b []byte) 
 func (p *Portal) jtPrize(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	writeData(w, http.StatusOK, "image/jpeg", jtPrizeJPG)
+}
+
+// jtSplash serves the colour-ASCII boot splash. It is stored gzipped and returned
+// with Content-Encoding: gzip, which every browser transparently inflates, so the
+// dashboard's fetch reads the HTML fragment directly.
+func (p *Portal) jtSplash(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Content-Encoding", "gzip")
+	writeData(w, http.StatusOK, "text/html; charset=utf-8", jtSplashGz)
 }
 
 // addr renders the portal bind address. The default bind is loopback, so the

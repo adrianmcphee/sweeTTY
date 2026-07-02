@@ -4,3 +4,7 @@
 # diffs; otherwise these multi-megabyte files dwarf the Go and mislabel the repo.
 internal/proto/http/secrets.html linguist-generated=true
 internal/proto/http/backup.html  linguist-generated=true
+
+# Embedded binary assets: never mangle line endings.
+*.gz binary
+*.jpg binary

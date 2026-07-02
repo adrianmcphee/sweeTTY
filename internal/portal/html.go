@@ -236,6 +236,17 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 #jtflash img{max-width:min(68vw,480px);max-height:76vh;border-radius:16px;border:3px solid #fbbf24;box-shadow:0 16px 70px rgba(0,0,0,.75),0 0 44px rgba(251,191,36,.35)}
 @keyframes jtflash{0%{opacity:0;transform:scale(.82) rotate(-3deg)}12%{opacity:1;transform:scale(1) rotate(0)}80%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(1.03)}}
 
+#splash{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(120% 120% at 50% 38%,#16161c,#0a0a0c 68%);cursor:pointer}
+#splash.hide{opacity:0;transition:opacity .5s ease;pointer-events:none}
+#splash.gone{display:none}
+.splashwrap{display:flex;flex-direction:column;align-items:center;gap:16px;animation:splashIn .55s cubic-bezier(.2,.75,.25,1) both}
+.splashart{line-height:0}
+.jtart{margin:0;font-family:var(--mono);font-size:6px;line-height:6px;letter-spacing:0;white-space:pre;display:inline-block;transform-origin:center;border-radius:10px;overflow:hidden;box-shadow:0 24px 90px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.05)}
+.jtart b{font-weight:400}
+.splashcap{font-family:var(--mono);font-size:11px;letter-spacing:.32em;color:var(--mut2);text-transform:uppercase;animation:capblink 1.1s ease-in-out infinite}
+@keyframes splashIn{0%{opacity:0;transform:translateY(26px) scale(.84)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes capblink{0%,100%{opacity:.3}50%{opacity:.85}}
+
 @media(max-width:1100px){#app{grid-template-columns:64px 1fr}.brand .bt,.brand .bs,.navitem .grow,.navbadge,.navsec,.logoutbtn span:not([data-icon]){display:none}.navitem,.logoutbtn{justify-content:center;gap:0}.recon{grid-template-columns:1fr}}
 </style></head>
 <body>
@@ -355,6 +366,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div id="toasts"></div>
 <canvas id="confetti"></canvas>
 <div id="jtflash"><img src="/dashboard/jt-prize.jpg" alt=""></div>
+<div id="splash"><div class="splashwrap"><div class="splashart" id="splash_art"></div><div class="splashcap" id="splash_cap">booting console</div></div></div>
 
 <script>
 var ICONS={
@@ -1249,6 +1261,35 @@ if(scInput)scInput.addEventListener('input',function(){srcSearch=this.value.toLo
 document.getElementById('bait_card').addEventListener('click',function(){showView('honeytokens');});
 document.getElementById('dl_card').addEventListener('click',function(){showView('payloads');});
 document.getElementById('scan_card').addEventListener('click',function(){showView('recon');});
+
+// --- boot splash: the colour-ASCII JT portrait animates up, holds ~1s, then out.
+var splashDone=false;
+function dismissSplash(){
+if(splashDone)return;splashDone=true;
+var sp=document.getElementById('splash');if(!sp)return;
+sp.classList.add('hide');
+setTimeout(function(){sp.classList.add('gone');sp.innerHTML='';},560);
+}
+function showSplash(){
+var sp=document.getElementById('splash');if(!sp)return;
+sp.addEventListener('click',dismissSplash);
+setTimeout(dismissSplash,2800); // safety: never let a stalled fetch trap the UI
+fetch('/dashboard/jt-splash',{credentials:'same-origin'})
+.then(function(r){return r.text();})
+.then(function(h){
+var art=document.getElementById('splash_art');art.innerHTML=h;
+var pre=art.querySelector('.jtart');
+if(pre){
+var w=pre.offsetWidth||pre.scrollWidth,ht=pre.offsetHeight||pre.scrollHeight;
+var s=Math.min((window.innerWidth*0.9)/w,(window.innerHeight*0.78)/ht,1.8);
+if(s>0&&isFinite(s))pre.style.transform='scale('+s+')';
+}
+var cap=document.getElementById('splash_cap');if(cap)cap.textContent='console ready';
+setTimeout(dismissSplash,1200); // hold ~1s after the art lands, then animate out
+})
+.catch(dismissSplash);
+}
+showSplash();
 
 paintIcons();
 tickClock();setInterval(tickClock,1000);
