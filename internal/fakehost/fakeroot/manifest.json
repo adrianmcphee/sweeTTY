@@ -57,7 +57,7 @@
     {"path": "/usr/bin/vim", "target": "/usr/bin/vim.basic"}
   ],
   "binaries": [
-    {"dir": "/usr/bin", "size": 35112, "names": [
+    {"dir": "/usr/bin", "names": [
       "bash","dash","ls","cat","cp","mv","rm","mkdir","rmdir","touch","ln","chmod","chown","echo","pwd",
       "grep","egrep","sed","awk","cut","sort","uniq","head","tail","wc","tr","find","xargs","tar","gzip",
       "gunzip","bzip2","zip","unzip","wget","curl","scp","ssh","sftp","python3","perl","ruby","gcc","cc",
@@ -66,7 +66,7 @@
       "lscpu","lsblk","lsof","netstat","ss","ip","ping","dig","nslookup","host","nc","base64","md5sum",
       "sha256sum","openssl","crontab","sudo","su","env","printenv","which","tee","xxd","strings","nohup","screen","tmux"
     ]},
-    {"dir": "/usr/sbin", "size": 47120, "names": [
+    {"dir": "/usr/sbin", "names": [
       "sshd","nginx","mysqld","useradd","userdel","usermod","groupadd","service","iptables","nft","ufw",
       "cron","rsyslogd","visudo","ifconfig","route","sysctl"
     ]}

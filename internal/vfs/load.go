@@ -155,15 +155,22 @@ func Load(efs fs.FS, root string, transform Transform) (*FS, error) {
 		if pm, ok := parseMode(bg.Mode); ok {
 			mode = pm
 		}
-		size := bg.Size
-		if size == 0 {
-			size = 35112
-		}
 		dir := ld.ensureDir(cleanAbs(bg.Dir))
 		for _, name := range bg.Names {
+			// Derive a stable per-binary size and mtime from the name. Real binaries
+			// span tens of KB to over a MB and were installed at slightly different
+			// times; a whole /usr/bin at one identical size and date is an instant tell.
+			// An explicit bg.Size still pins the group if a manifest wants a fixed value.
+			size := bg.Size
+			mtime := ld.baseMtime
+			if size == 0 {
+				h := binHash(name)
+				size = int64(14000 + h%1250000)
+				mtime = ld.baseMtime.Add(-time.Duration(h%3000) * time.Hour)
+			}
 			dir.children[name] = &Node{
 				name: name, mode: mode, uid: ld.uid, gid: ld.gid,
-				uname: ld.uname, gname: ld.gname, mtime: ld.baseMtime,
+				uname: ld.uname, gname: ld.gname, mtime: mtime,
 				stub: true, size: size,
 			}
 		}
@@ -266,6 +273,16 @@ func (f *FS) mkdirAll(abs string) *Node {
 	}
 	parent.children[name] = n
 	return n
+}
+
+// binHash is a small stable FNV-1a hash of a binary name, used to derive a varied
+// but repeatable size and mtime so a stub-binary listing looks like a real one.
+func binHash(name string) uint32 {
+	h := uint32(2166136261)
+	for i := 0; i < len(name); i++ {
+		h = (h ^ uint32(name[i])) * 16777619
+	}
+	return h
 }
 
 // Place writes a file at abs (creating ancestor directories) with the given
