@@ -42,72 +42,16 @@ func (p *Portal) payloads(w http.ResponseWriter, _ *http.Request) {
 	// Both an over-the-wire fetch (DOWNLOAD_ATTEMPT) and an in-place dropper
 	// (DROPPER) are payload deliveries; this page rolls up who delivered what by
 	// either route, since the loaders on a given sensor may favour one or the other.
-	entries, err := p.readEntries(func(e event.Entry) bool {
-		return e.Event == "DOWNLOAD_ATTEMPT" || e.Event == "DROPPER"
-	})
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"sources": []payloadSource{}, "total": 0, "by_url": map[string]any{}})
-		return
-	}
+	// The rows come from the incremental projection (store.go), folded once per log
+	// line rather than per request.
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	p.syncStoreLocked()
+	pa := &p.store.pay
 
-	bySrc := map[string]*payloadSource{}
-	sessionSeen := map[string]map[string]bool{}
-	urlSeen := map[string]map[string]bool{}
-	dropSeen := map[string]map[string]bool{}
-	byURL := map[string]int{}
-	bySha := map[string]int{}
-	order := []string{}
-	var dropperTotal int
-
-	for _, e := range entries {
-		src := srcOf(e)
-		row := bySrc[src]
-		if row == nil {
-			loc := p.geo.Locate(src)
-			row = &payloadSource{
-				IP:        src,
-				Country:   loc.Country,
-				ASN:       loc.ASN,
-				Org:       loc.Org,
-				Scope:     loc.Scope,
-				FirstSeen: e.Time,
-			}
-			bySrc[src] = row
-			sessionSeen[src] = map[string]bool{}
-			urlSeen[src] = map[string]bool{}
-			dropSeen[src] = map[string]bool{}
-			order = append(order, src)
-		}
-		row.Count++
-		row.LastSeen = e.Time // entries are chronological, so the last write wins
-		if e.Session != "" && !sessionSeen[src][e.Session] {
-			sessionSeen[src][e.Session] = true
-			row.Sessions = append(row.Sessions, e.Session)
-		}
-		if e.Event == "DROPPER" {
-			dropperTotal++
-			key := e.SHA256
-			if key == "" {
-				key = e.Filename
-			}
-			bySha[key]++
-			if !dropSeen[src][key] {
-				dropSeen[src][key] = true
-				row.Droppers = append(row.Droppers, droppedRef{Filename: e.Filename, SHA256: e.SHA256})
-			}
-			continue
-		}
-		url := payloadURL(e)
-		if !urlSeen[src][url] {
-			urlSeen[src][url] = true
-			row.URLs = append(row.URLs, url)
-		}
-		byURL[url]++
-	}
-
-	sources := make([]payloadSource, 0, len(order))
-	for _, src := range order {
-		sources = append(sources, *bySrc[src])
+	sources := make([]payloadSource, 0, len(pa.order))
+	for _, src := range pa.order {
+		sources = append(sources, *pa.bySrc[src])
 	}
 	// Busiest sources first, breaking ties by most recent activity so a fresh pull
 	// surfaces over an equally-busy stale one.
@@ -118,13 +62,20 @@ func (p *Portal) payloads(w http.ResponseWriter, _ *http.Request) {
 		return sources[i].LastSeen > sources[j].LastSeen
 	})
 
+	byURL, bySha := pa.byURL, pa.bySha
+	if byURL == nil {
+		byURL = map[string]int{}
+	}
+	if bySha == nil {
+		bySha = map[string]int{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sources":       sources,
-		"total":         len(entries),
-		"unique_srcs":   len(order),
+		"total":         pa.total,
+		"unique_srcs":   len(pa.order),
 		"by_url":        byURL,
 		"by_sha":        bySha,
-		"dropper_total": dropperTotal,
+		"dropper_total": pa.dropperTotal,
 		"geo_active":    p.geo.Loaded() > 0,
 	})
 }

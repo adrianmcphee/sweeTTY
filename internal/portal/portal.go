@@ -71,6 +71,7 @@ type Portal struct {
 	watchGate chan struct{} // bounds concurrent live session watchers
 	splashes  [][]byte      // gzipped boot-splash variants, one picked at random per load
 	version   string        // build version, shown in the console
+	store     store         // incremental projections over the log, see store.go
 }
 
 // SetVersion records the build version string for display in the console.

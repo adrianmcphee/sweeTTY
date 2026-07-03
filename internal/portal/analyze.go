@@ -224,50 +224,70 @@ func verdict(s sourceSignals) (kind string, confidence int, reasons []string) {
 	return kind, confidence, reasons
 }
 
-// analyzeSource reads one source's full event history (chronological) and returns
-// the assessment: visit segmentation, the phases it reached, and the conservative
-// bot/human verdict with its evidence.
-func analyzeSource(entries []event.Entry) Assessment {
-	var sig sourceSignals
-	var visits []Visit
-	cur := -1
-	var prevMs int64
-	reached := map[string]bool{}
+// sourceAnalyzer folds one source's chronological event history into the
+// assessment one entry at a time, so a caller streaming a large history never
+// has to hold it in memory.
+type sourceAnalyzer struct {
+	sig     sourceSignals
+	visits  []Visit
+	prevMs  int64
+	reached map[string]bool
+	seenAny bool
+}
 
-	for i, e := range entries {
-		ms := entryMs(e)
-		if i == 0 || (prevMs != 0 && ms != 0 && ms-prevMs > visitGapMs) {
-			visits = append(visits, Visit{Start: e.Time})
-			cur = len(visits) - 1
+// observe folds the next entry of the source's history. Entries must arrive in
+// chronological (file) order, the order the log carries them.
+func (a *sourceAnalyzer) observe(e event.Entry) {
+	ms := entryMs(e)
+	if !a.seenAny || (a.prevMs != 0 && ms != 0 && ms-a.prevMs > visitGapMs) {
+		a.visits = append(a.visits, Visit{Start: e.Time})
+	}
+	a.seenAny = true
+	cur := &a.visits[len(a.visits)-1]
+	cur.End = e.Time
+	cur.Events++
+	if ph := phaseOf(e); ph != "" {
+		if a.reached == nil {
+			a.reached = map[string]bool{}
 		}
-		visits[cur].End = e.Time
-		visits[cur].Events++
-		if ph := phaseOf(e); ph != "" {
-			reached[ph] = true
-			if phaseRank(ph) > phaseRank(visits[cur].Phase) {
-				visits[cur].Phase = ph
-			}
-		}
-		if e.Event == "COMMAND" {
-			visits[cur].Accepted = true
-		}
-		sig.observe(e)
-		if ms != 0 {
-			prevMs = ms
+		a.reached[ph] = true
+		if phaseRank(ph) > phaseRank(cur.Phase) {
+			cur.Phase = ph
 		}
 	}
+	if e.Event == "COMMAND" {
+		cur.Accepted = true
+	}
+	a.sig.observe(e)
+	if ms != 0 {
+		a.prevMs = ms
+	}
+}
 
-	kind, confidence, reasons := verdict(sig)
-	returning := len(visits) >= 2 || (sig.scanned && (sig.commands > 0 || sig.sessions > 0))
+// assessment returns the verdict over everything observed so far.
+func (a *sourceAnalyzer) assessment() Assessment {
+	kind, confidence, reasons := verdict(a.sig)
+	returning := len(a.visits) >= 2 || (a.sig.scanned && (a.sig.commands > 0 || a.sig.sessions > 0))
 	return Assessment{
 		Kind:       kind,
 		Confidence: confidence,
 		Reasons:    reasons,
-		Phases:     orderedPhases(reached),
-		Visits:     visits,
-		CadenceMs:  sig.minCmdGap,
+		Phases:     orderedPhases(a.reached),
+		Visits:     a.visits,
+		CadenceMs:  a.sig.minCmdGap,
 		Returning:  returning,
 	}
+}
+
+// analyzeSource reads one source's full event history (chronological) and returns
+// the assessment: visit segmentation, the phases it reached, and the conservative
+// bot/human verdict with its evidence.
+func analyzeSource(entries []event.Entry) Assessment {
+	var a sourceAnalyzer
+	for _, e := range entries {
+		a.observe(e)
+	}
+	return a.assessment()
 }
 
 // phaseOf maps one entry to the attack phase it represents, or "" if it is not

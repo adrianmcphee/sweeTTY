@@ -68,199 +68,64 @@ type agentStat struct {
 	Sources int    `json:"sources"`
 }
 
-// overview aggregates the whole event log into the recon analytics the dashboard
-// needs in a single read: headline counts (port scans and the other attempt
-// types), a per-listener-port breakdown, a per-country breakdown, the top client
-// user-agent strings, and a per-source rollup enriched with country and scope.
-// Management-plane events (the portal's own system notices) are excluded so the
-// figures describe attacker activity only.
+// overview serves the recon analytics the dashboard needs in a single read:
+// headline counts (port scans and the other attempt types), a per-listener-port
+// breakdown, a per-country breakdown, the top client user-agent strings, and a
+// per-source rollup enriched with country and scope. Management-plane events
+// (the portal's own system notices) are excluded so the figures describe
+// attacker activity only. The figures come from the incremental projection
+// (store.go), so a request folds only the log's unread tail, never the whole
+// file.
 func (p *Portal) overview(w http.ResponseWriter, _ *http.Request) {
-	entries, err := p.readEntries(nil)
-	if err != nil {
-		writeJSON(w, http.StatusOK, emptyOverview(p))
-		return
-	}
-
-	bySrc := map[string]*overviewSource{}
-	order := []string{}
-	sessSeen := map[string]map[string]bool{}
-	protoSeen := map[string]map[string]bool{}
-	portSeen := map[string]map[int]bool{}
-	sigBySrc := map[string]*sourceSignals{}
-	visitLast := map[string]int64{}
-	visitCount := map[string]int{}
-
-	portStats := map[int]*portStat{}
-	uaStats := map[string]*agentStat{}
-	uaSrcSeen := map[string]map[string]bool{}
-
-	var events, sessions, scans, creds, https, downloads, execs, bait int
-	// Whole-UTC-day counters for the live-feed stat cards, so they reflect the full
-	// log for today rather than the capped in-page event buffer the browser holds.
-	todayStr := time.Now().UTC().Format("2006-01-02")
-	var tSessions, tScans, tDownloads, tBait int
-	tSrc := map[string]bool{}
-
-	for _, e := range entries {
-		switch e.Event {
-		case "", "SYSTEM":
-			continue
-		}
-		src := srcOf(e)
-		if src == "" {
-			continue
-		}
-
-		events++
-		switch e.Event {
-		case "PORT_SCAN":
-			scans++
-		case "SESSION_START":
-			sessions++
-		case "CREDENTIAL":
-			creds++
-		case "HTTP_REQUEST", "HTTP_POST":
-			https++
-		case "DOWNLOAD_ATTEMPT":
-			downloads++
-		case "EXEC_ATTEMPT":
-			execs++
-		case "HONEYTOKEN":
-			bait++
-		}
-
-		if len(e.Time) >= 10 && e.Time[:10] == todayStr {
-			tSrc[src] = true
-			switch e.Event {
-			case "SESSION_START":
-				tSessions++
-			case "PORT_SCAN":
-				tScans++
-			case "DOWNLOAD_ATTEMPT":
-				tDownloads++
-			case "HONEYTOKEN":
-				tBait++
-			}
-		}
-
-		row := bySrc[src]
-		if row == nil {
-			loc := p.geo.Locate(src)
-			row = &overviewSource{IP: src, Country: loc.Country, ASN: loc.ASN, Org: loc.Org, Scope: loc.Scope, FirstSeen: e.Time}
-			bySrc[src] = row
-			order = append(order, src)
-			sessSeen[src] = map[string]bool{}
-			protoSeen[src] = map[string]bool{}
-			portSeen[src] = map[int]bool{}
-		}
-
-		// Fold the event into this source's signals and visit counter, the same way
-		// analyzeSource does for the drawer, so the list tag matches the drawer verdict.
-		sig := sigBySrc[src]
-		first := sig == nil
-		if first {
-			sig = &sourceSignals{}
-			sigBySrc[src] = sig
-			visitCount[src] = 1
-		}
-		ms := entryMs(e)
-		if !first && ms != 0 {
-			if vl := visitLast[src]; vl != 0 && ms-vl > visitGapMs {
-				visitCount[src]++
-			}
-		}
-		if ms != 0 {
-			visitLast[src] = ms
-		}
-		sig.observe(e)
-
-		row.Events++
-		row.LastSeen = e.Time // entries are chronological, so the last write wins
-		if e.Session != "" && !sessSeen[src][e.Session] {
-			sessSeen[src][e.Session] = true
-			row.Sessions++
-		}
-		if e.Protocol != "" && !protoSeen[src][e.Protocol] {
-			protoSeen[src][e.Protocol] = true
-			row.Protocols = append(row.Protocols, e.Protocol)
-		}
-		if e.Port > 0 && !portSeen[src][e.Port] {
-			portSeen[src][e.Port] = true
-			row.Ports = append(row.Ports, e.Port)
-		}
-		if e.Event == "PORT_SCAN" {
-			row.Scanned = true
-		}
-
-		if e.Port > 0 {
-			ps := portStats[e.Port]
-			if ps == nil {
-				ps = &portStat{Port: e.Port, Protocol: e.Protocol}
-				portStats[e.Port] = ps
-			}
-			if ps.Protocol == "" {
-				ps.Protocol = e.Protocol
-			}
-			ps.Hits++
-			if e.Event == "PORT_SCAN" {
-				ps.Scans++
-			}
-		}
-
-		if e.UserAgent != "" {
-			ua := uaStats[e.UserAgent]
-			if ua == nil {
-				ua = &agentStat{Agent: e.UserAgent}
-				uaStats[e.UserAgent] = ua
-				uaSrcSeen[e.UserAgent] = map[string]bool{}
-			}
-			ua.Count++
-			if !uaSrcSeen[e.UserAgent][src] {
-				uaSrcSeen[e.UserAgent][src] = true
-				ua.Sources++
-			}
-		}
-	}
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	p.syncStoreLocked()
+	o := &p.store.ov
+	o.init()
 
 	// Tag each source with the analyzer's verdict, its visit count, and whether it
 	// is a returning visitor. The reasons are dropped here (the per-IP drawer carries
 	// them); the list needs only the headline kind.
-	for _, src := range order {
-		row := bySrc[src]
-		row.Visits = visitCount[src]
-		if sig := sigBySrc[src]; sig != nil {
+	for _, src := range o.order {
+		row := o.bySrc[src]
+		row.Visits = o.visitCnt[src]
+		if sig := o.sigBySrc[src]; sig != nil {
 			kind, conf, _ := verdict(*sig)
 			row.Kind = kind
 			row.Confidence = conf
-			row.Returning = visitCount[src] >= 2 || (row.Scanned && (sig.commands > 0 || sig.sessions > 0))
+			row.Returning = o.visitCnt[src] >= 2 || (row.Scanned && (sig.commands > 0 || sig.sessions > 0))
 		}
 	}
 
+	// Whole-UTC-day counters for the live-feed stat cards, so they reflect the full
+	// log for today rather than the capped in-page event buffer the browser holds.
+	tSessions, tScans, tDownloads, tBait, tSrcs := o.today(time.Now().UTC().Format("2006-01-02"))
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"totals": map[string]any{
-			"events":        events,
-			"sources":       len(order),
-			"sessions":      sessions,
-			"port_scans":    scans,
-			"credentials":   creds,
-			"http_requests": https,
-			"downloads":     downloads,
-			"exec":          execs,
-			"bait":          bait,
-			"user_agents":   len(uaStats),
+			"events":        o.events,
+			"sources":       len(o.order),
+			"sessions":      o.sessions,
+			"port_scans":    o.scans,
+			"credentials":   o.creds,
+			"http_requests": o.https,
+			"downloads":     o.downloads,
+			"exec":          o.execs,
+			"bait":          o.bait,
+			"user_agents":   len(o.uaStats),
 		},
 		"today": map[string]any{
 			"sessions":   tSessions,
-			"sources":    len(tSrc),
+			"sources":    tSrcs,
 			"downloads":  tDownloads,
 			"bait":       tBait,
 			"port_scans": tScans,
 		},
-		"by_port":     sortedPorts(portStats),
-		"by_country":  countryRollup(order, bySrc),
-		"by_isp":      ispRollup(order, bySrc),
-		"user_agents": topAgents(uaStats),
-		"sources":     topSources(order, bySrc),
+		"by_port":     sortedPorts(o.portStats),
+		"by_country":  countryRollup(o.order, o.bySrc),
+		"by_isp":      ispRollup(o.order, o.bySrc),
+		"user_agents": topAgents(o.uaStats),
+		"sources":     topSources(o.order, o.bySrc),
 		"geo_active":  p.geo.Loaded() > 0,
 		"asn_active":  p.geo.AsnLoaded() > 0,
 		"version":     p.version,
@@ -397,22 +262,4 @@ func topAgents(m map[string]*agentStat) []agentStat {
 		out = out[:cap]
 	}
 	return out
-}
-
-// emptyOverview is the zero-valued response shape, returned when the log cannot be
-// read so the dashboard renders empty panels instead of erroring.
-func emptyOverview(p *Portal) map[string]any {
-	return map[string]any{
-		"totals": map[string]any{
-			"events": 0, "sources": 0, "sessions": 0, "port_scans": 0,
-			"credentials": 0, "http_requests": 0, "downloads": 0, "exec": 0, "bait": 0, "user_agents": 0,
-		},
-		"by_port":     []portStat{},
-		"by_country":  []countryStat{},
-		"by_isp":      []ispStat{},
-		"user_agents": []agentStat{},
-		"sources":     []overviewSource{},
-		"geo_active":  p.geo.Loaded() > 0,
-		"asn_active":  p.geo.AsnLoaded() > 0,
-	}
 }

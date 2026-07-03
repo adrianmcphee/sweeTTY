@@ -28,17 +28,19 @@ func srcOf(e event.Entry) string {
 	return util.HostOnly(e.IP)
 }
 
-// readEntries reads the whole log file and returns every entry that passes keep,
-// in file (chronological) order. Lines that are not valid JSON are skipped, so a
-// truncated final write cannot abort the read.
-func (p *Portal) readEntries(keep func(event.Entry) bool) ([]event.Entry, error) {
+// scanEntries streams every log entry through each, in file (chronological)
+// order, without ever materializing the file. Lines that are not valid JSON are
+// skipped, so a truncated final write cannot abort the read. The drill-down
+// endpoints scan rather than hold a projection: they are operator-initiated
+// one-offs, so the per-request cost is a read, never a per-poll one, and the
+// callback keeps only what its response needs.
+func (p *Portal) scanEntries(each func(event.Entry)) error {
 	f, err := os.Open(p.cfg.LogFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
-	var out []event.Entry
 	sc := bufio.NewScanner(f)
 	// Allow long lines: captured request bodies and headers can be large.
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -51,69 +53,117 @@ func (p *Portal) readEntries(keep func(event.Entry) bool) ([]event.Entry, error)
 		if err := json.Unmarshal(line, &e); err != nil {
 			continue
 		}
-		if keep == nil || keep(e) {
-			out = append(out, e)
-		}
+		each(e)
 	}
-	return out, sc.Err()
+	return sc.Err()
 }
 
+// lastN keeps the newest n entries streamed into it, in chronological order, so
+// a bounded transcript never costs more than n entries of memory no matter how
+// large the history is.
+type lastN struct {
+	buf     []event.Entry
+	start   int
+	full    bool
+	dropped bool
+}
+
+func newLastN(n int) *lastN { return &lastN{buf: make([]event.Entry, 0, n)} }
+
+func (l *lastN) add(e event.Entry) {
+	if len(l.buf) < cap(l.buf) {
+		l.buf = append(l.buf, e)
+		return
+	}
+	l.buf[l.start] = e
+	l.start = (l.start + 1) % len(l.buf)
+	l.full = true
+	l.dropped = true
+}
+
+// ordered returns the kept entries oldest-first.
+func (l *lastN) ordered() []event.Entry {
+	if !l.full {
+		return l.buf
+	}
+	out := make([]event.Entry, 0, len(l.buf))
+	out = append(out, l.buf[l.start:]...)
+	out = append(out, l.buf[:l.start]...)
+	return out
+}
+
+// drilldownEntryCap bounds the transcript returned for one IP or session. Far
+// above what the drawer renders usefully; the newest entries are kept, and the
+// response says when older ones were dropped. The assessment still reads the
+// full history, streamed.
+const drilldownEntryCap = 5000
+
 // logQuery serves the main feed: newest-first entries, optionally filtered by a
-// src-IP prefix and an exact event type, capped at limit.
+// src-IP prefix and an exact event type, capped at limit. The scan keeps only
+// the newest limit matches, so the request never holds the whole log.
 func (p *Portal) logQuery(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit := parseLimit(q.Get("limit"))
 	ipPrefix := q.Get("ip")
 	eventType := q.Get("event")
 
-	entries, err := p.readEntries(func(e event.Entry) bool {
+	keep := newLastN(limit)
+	err := p.scanEntries(func(e event.Entry) {
 		if ipPrefix != "" && !strings.HasPrefix(srcOf(e), ipPrefix) {
-			return false
+			return
 		}
 		if eventType != "" && e.Event != eventType {
-			return false
+			return
 		}
-		return true
+		keep.add(e)
 	})
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"entries": []event.Entry{}, "count": 0})
 		return
 	}
 
-	// Newest first, then cap. Reversing after the cap would drop the newest, so
-	// reverse first and take the head.
-	reversed := reverse(entries)
-	if len(reversed) > limit {
-		reversed = reversed[:limit]
-	}
+	reversed := reverse(keep.ordered())
 	writeJSON(w, http.StatusOK, map[string]any{"entries": reversed, "count": len(reversed)})
 }
 
-// byIP returns every entry attributable to one IP, by src_ip or by the host part
-// of the remote address, in chronological order so the JS can build a transcript.
+// byIP returns the newest entries attributable to one IP, by src_ip or by the
+// host part of the remote address, in chronological order so the JS can build a
+// transcript. The assessment (visits, phases, bot/human verdict) is folded over
+// the source's complete history as the scan streams past, so a capped transcript
+// never changes the verdict.
 func (p *Portal) byIP(w http.ResponseWriter, r *http.Request) {
 	ip := r.PathValue("ip")
-	entries, err := p.readEntries(func(e event.Entry) bool {
-		return srcOf(e) == ip || e.IP == ip || e.SrcIP == ip
+	keep := newLastN(drilldownEntryCap)
+	var an sourceAnalyzer
+	_ = p.scanEntries(func(e event.Entry) {
+		if srcOf(e) != ip && e.IP != ip && e.SrcIP != ip {
+			return
+		}
+		an.observe(e)
+		keep.add(e)
 	})
-	if err != nil {
-		entries = nil
-	}
-	// entries are chronological, so the assessment (visits, phases, bot/human
-	// verdict) reads the source's history in order.
-	writeJSON(w, http.StatusOK, map[string]any{"ip": ip, "entries": entries, "count": len(entries), "profile": analyzeSource(entries)})
+	entries := keep.ordered()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ip": ip, "entries": entries, "count": len(entries),
+		"capped": keep.dropped, "profile": an.assessment(),
+	})
 }
 
-// bySession returns every entry for one connection id, in chronological order.
+// bySession returns the newest entries for one connection id, in chronological
+// order.
 func (p *Portal) bySession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	entries, err := p.readEntries(func(e event.Entry) bool {
-		return e.Session == id
+	keep := newLastN(drilldownEntryCap)
+	_ = p.scanEntries(func(e event.Entry) {
+		if e.Session != id {
+			return
+		}
+		keep.add(e)
 	})
-	if err != nil {
-		entries = nil
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"session": id, "entries": entries, "count": len(entries)})
+	entries := keep.ordered()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session": id, "entries": entries, "count": len(entries), "capped": keep.dropped,
+	})
 }
 
 // events streams new log lines over Server-Sent Events. It opens the log file,

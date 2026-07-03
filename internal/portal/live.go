@@ -50,61 +50,22 @@ func (p *Portal) recordedSet() map[string]bool {
 
 // activeSessions lists connections that have started but not ended and whose last
 // event is recent, newest-activity-first, so the console can surface a live rail and
-// offer to watch them. It reads the same log as everything else; nothing new is
-// stored.
+// offer to watch them. It reads the incremental projection over the same log as
+// everything else (store.go); nothing new is stored. This is the dashboard's
+// hottest poll, so it must never cost a full log read.
 func (p *Portal) activeSessions(w http.ResponseWriter, _ *http.Request) {
-	type agg struct {
-		ip, proto       string
-		firstMs, lastMs int64
-		cmds            int
-		started, ended  bool
-	}
-	byID := map[string]*agg{}
-	var order []string
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	p.syncStoreLocked()
 
-	entries, err := p.readEntries(nil)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"sessions": []liveSession{}, "count": 0})
-		return
-	}
-	for _, e := range entries {
-		if e.Session == "" {
-			continue
-		}
-		a := byID[e.Session]
-		if a == nil {
-			a = &agg{firstMs: e.EpochMs, lastMs: e.EpochMs}
-			byID[e.Session] = a
-			order = append(order, e.Session)
-		}
-		if e.EpochMs < a.firstMs {
-			a.firstMs = e.EpochMs
-		}
-		if e.EpochMs > a.lastMs {
-			a.lastMs = e.EpochMs
-		}
-		if a.ip == "" {
-			a.ip = srcOf(e)
-		}
-		if a.proto == "" {
-			a.proto = e.Protocol
-		}
-		switch e.Event {
-		case "SESSION_START":
-			a.started = true
-		case "SESSION_END":
-			a.ended = true
-		case "COMMAND":
-			a.cmds++
-		}
-	}
-
-	cutoff := time.Now().UnixMilli() - activeWindow.Milliseconds()
+	now := time.Now().UnixMilli()
+	cutoff := now - activeWindow.Milliseconds()
+	p.store.live.sweep(now - liveSweepFactor*activeWindow.Milliseconds())
 	recorded := p.recordedSet()
 	out := []liveSession{}
-	for _, id := range order {
-		a := byID[id]
-		if a.ended || !a.started || a.lastMs < cutoff {
+	for _, id := range p.store.live.order {
+		a := p.store.live.byID[id]
+		if a == nil || !a.started || a.lastMs < cutoff {
 			continue
 		}
 		ls := liveSession{

@@ -3,8 +3,6 @@ package portal
 import (
 	"net/http"
 	"sort"
-
-	"sweetty/internal/event"
 )
 
 // honeytokenSource is one attacker's interaction with the planted baits: who
@@ -22,61 +20,21 @@ type honeytokenSource struct {
 	Tokens    []string `json:"tokens"`
 }
 
-// honeytokens aggregates every HONEYTOKEN event into per-source rows plus
-// headline totals, so an operator can see at a glance how often a bait (the fake
-// vault, or an image viewer pointed at a bait file) was triggered and from
-// where. This is the analytics view the bait exists to feed.
+// honeytokens serves every HONEYTOKEN event as per-source rows plus headline
+// totals, so an operator can see at a glance how often a bait (the fake vault,
+// or an image viewer pointed at a bait file) was triggered and from where. This
+// is the analytics view the bait exists to feed. The rows come from the
+// incremental projection (store.go), folded once per log line rather than per
+// request.
 func (p *Portal) honeytokens(w http.ResponseWriter, _ *http.Request) {
-	entries, err := p.readEntries(func(e event.Entry) bool {
-		return e.Event == "HONEYTOKEN"
-	})
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"sources": []honeytokenSource{}, "total": 0, "by_token": map[string]any{}})
-		return
-	}
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	p.syncStoreLocked()
+	h := &p.store.ht
 
-	bySrc := map[string]*honeytokenSource{}
-	sessionSeen := map[string]map[string]bool{}
-	tokenSeen := map[string]map[string]bool{}
-	byToken := map[string]int{}
-	order := []string{}
-
-	for _, e := range entries {
-		src := srcOf(e)
-		row := bySrc[src]
-		if row == nil {
-			loc := p.geo.Locate(src)
-			row = &honeytokenSource{
-				IP:        src,
-				Country:   loc.Country,
-				Scope:     loc.Scope,
-				FirstSeen: e.Time,
-			}
-			bySrc[src] = row
-			sessionSeen[src] = map[string]bool{}
-			tokenSeen[src] = map[string]bool{}
-			order = append(order, src)
-		}
-		row.Count++
-		row.LastSeen = e.Time // entries are chronological, so the last write wins
-		if e.Session != "" && !sessionSeen[src][e.Session] {
-			sessionSeen[src][e.Session] = true
-			row.Sessions = append(row.Sessions, e.Session)
-		}
-		if e.Note != "" && !tokenSeen[src][e.Note] {
-			tokenSeen[src][e.Note] = true
-			row.Tokens = append(row.Tokens, e.Note)
-		}
-		token := e.Note
-		if token == "" {
-			token = "unknown"
-		}
-		byToken[token]++
-	}
-
-	sources := make([]honeytokenSource, 0, len(order))
-	for _, src := range order {
-		sources = append(sources, *bySrc[src])
+	sources := make([]honeytokenSource, 0, len(h.order))
+	for _, src := range h.order {
+		sources = append(sources, *h.bySrc[src])
 	}
 	// Busiest sources first, breaking ties by most recent activity so a fresh hit
 	// surfaces over an equally-busy stale one.
@@ -87,10 +45,14 @@ func (p *Portal) honeytokens(w http.ResponseWriter, _ *http.Request) {
 		return sources[i].LastSeen > sources[j].LastSeen
 	})
 
+	byToken := h.byToken
+	if byToken == nil {
+		byToken = map[string]int{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sources":     sources,
-		"total":       len(entries),
-		"unique_srcs": len(order),
+		"total":       h.total,
+		"unique_srcs": len(h.order),
 		"by_token":    byToken,
 		"geo_active":  p.geo.Loaded() > 0,
 	})
