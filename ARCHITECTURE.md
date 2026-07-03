@@ -40,7 +40,7 @@ A download is logged and faked: an inert file lands in the per-session overlay s
 
 ## The management plane
 
-The portal has no network footprint. It binds loopback and serves the dashboard over plain HTTP with no application auth. The operator reaches it by forwarding the box's real management SSH (itself on a randomized, http-like port) to the loopback portal, so SSH key auth is the single front door.
+The portal has no network footprint. It binds loopback and serves the dashboard over plain HTTP with no application auth. The operator reaches it by forwarding the box's real management SSH (itself on a randomized, http-like port) to the loopback portal, so SSH key auth is the single front door. [`PORTAL.md`](./PORTAL.md) details the portal's own architecture: the SSE feeds, the incremental projections over the log, and the bounded drill-downs.
 
 ```mermaid
 flowchart LR
