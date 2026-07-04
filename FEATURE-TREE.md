@@ -82,6 +82,7 @@ network, executing attacker input, or writing to the host disk.
 - **ssh to the backup host named in the breadcrumb trail reaches a second coherent host; the pivot credential is captured**. _internal/proto/telnet: TestPivotToJustinTimberlakeHost_
 - **Bait files live at a randomized per-instance path (`persona.LootPath`) reached via the shell history; ls, stat, and file report a normal image**. _internal/proto/telnet: TestPivotToJustinTimberlakeHost_
 - **On-box reads of a bait image (cat, an ASCII image viewer, the vault command) render the embedded colour-ANSI reveal immediately; base64 (the exfil channel) hands over a real Justin Timberlake JPEG so an attacker who copies the blob and decodes it locally opens a picture of JT off-box rather than any real secret. Every path logs a HONEYTOKEN**. _internal/proto/telnet: TestBaitImageRevealsTheGag_
+- **The reveal art is upper-half-block 256-colour rendering of the source photos, so the portrait reads as a photo rather than glyph noise, resets colour per line, and stays within a standard terminal width**. _internal/shell: TestRevealArtIsWellFormed, TestRandomRevealReturnsArt_
 - **Running the fake vault or wallet logs a HONEYTOKEN**. _internal/proto/telnet: TestHoneytokenVaultIsTracked_
 
 ## Resource limits and tarpits (VISION §5)

@@ -21,9 +21,12 @@ import (
 // attacker views or grabs a bait image (the terminal image viewers, cat/base64
 // on a bait file, the fake vault command). They are operator-replaceable assets:
 // drop any number of your own .txt renderings into internal/shell/reveal/ and
-// rebuild; one is chosen at random per view. The shipped art is plain ASCII
-// coloured with 16-colour ANSI SGR codes, which renders on essentially any
-// terminal an attacker connects with. Nothing in the name hints at the gag.
+// rebuild; one is chosen at random per view. The shipped art is upper-half-block
+// (U+2580) rendering in 256-colour ANSI, each cell carrying two vertically
+// stacked pixels of real colour so the portrait reads as a photo rather than
+// glyph noise. 256-colour renders on essentially any terminal an attacker
+// connects with (including ones without truecolour, such as Apple Terminal).
+// Nothing in the name hints at the gag.
 //
 //go:embed reveal
 var revealArt embed.FS
