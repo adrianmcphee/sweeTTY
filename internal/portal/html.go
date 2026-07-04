@@ -99,6 +99,9 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .row .ip{width:142px;flex:none;color:var(--mut);font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .svc{width:104px;flex:none;color:var(--acc);font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .msg{flex:1;color:#d4d4d8;font-family:var(--mono);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.row .cc{width:26px;flex:none;color:var(--mut2);font-family:var(--mono);font-size:11px}
+.row .tag{flex:none;font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--bd);border-radius:9px;padding:1px 7px;white-space:nowrap}
+.row .tag.ret{color:#fbbf24;border-color:rgba(251,191,36,.35)}
 .empty{padding:40px 16px;text-align:center;color:var(--mut2);font-size:13px}
 
 .chips{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px;border-bottom:1px solid var(--bd)}
@@ -443,8 +446,16 @@ var div=el('div','row');
 div.appendChild(el('span','t',hms(e.time)));
 div.appendChild(badgeEl(e.event));
 div.appendChild(el('span','ip',srcOf(e)));
+// Portal-plane context the server attaches to each feed event: country (org on
+// hover), the classifier's verdict, and whether this source has been here before.
+var g=e.geo||{};
+var cc=el('span','cc',g.country||'');
+if(g.org)cc.title=g.org;
+div.appendChild(cc);
 div.appendChild(el('span','svc',svcOf(e)));
 div.appendChild(el('span','msg',summary(e)));
+if(g.kind)div.appendChild(el('span','tag',g.kind));
+if(g.returning)div.appendChild(el('span','tag ret',g.visits>=2?'returning · '+g.visits:'returning'));
 var ip=srcOf(e);
 div.addEventListener('click',function(){openIP(ip);});
 return div;

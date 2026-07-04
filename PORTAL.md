@@ -35,6 +35,7 @@ flowchart LR
 - **A fresh connection starts at the end.** History is the projections' job; the feed only streams what happens next. A stale offset (past a rotated file's size) degrades to end-of-file rather than erroring.
 - **Idle streams stay alive.** A comment ping goes out after ~10s of silence so proxies and the browser keep the connection open.
 - **Subscribers are gated.** Each stream holds a goroutine and a file descriptor for its whole life, so concurrent subscribers are capped (64) and the excess is shed with a 503 rather than served into exhaustion.
+- **Frames carry display context.** Each pushed line is enriched at read time with the portal-plane view of its source: country and operator, visit count, whether it has been here before, and the classifier's verdict. The backfill query attaches the same context, so a live row and a historical row render identically. The line on disk is never modified, and a line that fails to parse streams raw, so enrichment can degrade but never block the feed.
 
 The dashboard uses the feed both to append the visible event stream and as a trigger: an event naming a session updates the live rail optimistically, and a notable event (a honeytoken trip, a payload pull) refreshes the stat cards immediately while routine volume rides the slow timer.
 

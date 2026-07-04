@@ -28,6 +28,97 @@ func srcOf(e event.Entry) string {
 	return util.HostOnly(e.IP)
 }
 
+// feedGeo is the portal-plane context attached to a feed event for display:
+// where the source resolves to and what the sensor already knows about it (how
+// many visits, whether it has been here before, the classifier's verdict). It
+// is computed at read time from the resolver and the projections; the log line
+// on disk stays exactly what the listener wrote.
+type feedGeo struct {
+	Country   string `json:"country,omitempty"`
+	Org       string `json:"org,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Visits    int    `json:"visits,omitempty"`
+	Returning bool   `json:"returning,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+}
+
+// sourceContexts returns the display context for each distinct source in srcs.
+// The store is folded first, so the answer reflects every event already on disk,
+// including the one being enriched.
+func (p *Portal) sourceContexts(srcs []string) map[string]*feedGeo {
+	out := make(map[string]*feedGeo, len(srcs))
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	p.syncStoreLocked()
+	o := &p.store.ov
+	for _, src := range srcs {
+		if src == "" || out[src] != nil {
+			continue
+		}
+		loc := p.geo.Locate(src)
+		g := &feedGeo{Country: loc.Country, Org: loc.Org, Scope: loc.Scope}
+		if o.bySrc != nil {
+			if row := o.bySrc[src]; row != nil {
+				g.Visits = o.visitCnt[src]
+				if sig := o.sigBySrc[src]; sig != nil {
+					if kind, _, _ := verdict(*sig); kind != kindUnknown {
+						g.Kind = kind
+					}
+					g.Returning = g.Visits >= 2 || (row.Scanned && (sig.commands > 0 || sig.sessions > 0))
+				}
+			}
+		}
+		out[src] = g
+	}
+	return out
+}
+
+// enrichFeedLine attaches the source context to one raw log line before it is
+// streamed. The line is parsed into a generic map so fields this build does not
+// know survive untouched; on any failure the raw line streams as-is, so
+// enrichment can degrade but never block the feed.
+func (p *Portal) enrichFeedLine(line string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(line), &m); err != nil {
+		return line
+	}
+	src, _ := m["src_ip"].(string)
+	if src == "" {
+		if ip, _ := m["ip"].(string); ip != "" {
+			src = util.HostOnly(ip)
+		}
+	}
+	if src == "" {
+		return line
+	}
+	m["geo"] = p.sourceContexts([]string{src})[src]
+	b, err := json.Marshal(m)
+	if err != nil {
+		return line
+	}
+	return string(b)
+}
+
+// enrichedEntry is a feed entry with its display context attached, for the
+// backfill query, so the dashboard renders history and live pushes identically.
+type enrichedEntry struct {
+	event.Entry
+	Geo *feedGeo `json:"geo,omitempty"`
+}
+
+func (p *Portal) enrichEntries(entries []event.Entry) []enrichedEntry {
+	srcs := make([]string, 0, len(entries))
+	for _, e := range entries {
+		srcs = append(srcs, srcOf(e))
+	}
+	ctx := p.sourceContexts(srcs)
+	out := make([]enrichedEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, enrichedEntry{Entry: e, Geo: ctx[srcOf(e)]})
+	}
+	return out
+}
+
 // scanEntries streams every log entry through each, in file (chronological)
 // order, without ever materializing the file. Lines that are not valid JSON are
 // skipped, so a truncated final write cannot abort the read. The drill-down
@@ -122,7 +213,7 @@ func (p *Portal) logQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reversed := reverse(keep.ordered())
+	reversed := p.enrichEntries(reverse(keep.ordered()))
 	writeJSON(w, http.StatusOK, map[string]any{"entries": reversed, "count": len(reversed)})
 }
 
@@ -256,7 +347,7 @@ func (p *Portal) events(w http.ResponseWriter, r *http.Request) {
 				if line == "" {
 					continue
 				}
-				frame := "id: " + strconv.FormatInt(offset, 10) + "\nevent: log\ndata: " + line + "\n\n"
+				frame := "id: " + strconv.FormatInt(offset, 10) + "\nevent: log\ndata: " + p.enrichFeedLine(line) + "\n\n"
 				if _, err := io.WriteString(w, frame); err != nil {
 					return
 				}
