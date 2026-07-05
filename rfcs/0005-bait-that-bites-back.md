@@ -1,6 +1,6 @@
 # RFC 0005: Bait that bites back after they leave
 
-Roadmap: [Direction 3](../ROADMAP.md#3-bait-that-bites-back-after-they-leave).
+Roadmap: [Direction 2](../ROADMAP.md#2-bait-that-bites-back-after-they-leave).
 Doctrine: VISION §8 (bait that bites back).
 
 ## Problem

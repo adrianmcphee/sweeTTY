@@ -1,6 +1,6 @@
 # RFC 0004: The services attackers try to own next
 
-Roadmap: [Direction 2](../ROADMAP.md#2-the-services-attackers-try-to-own-next).
+Roadmap: [Direction 1](../ROADMAP.md#1-the-services-attackers-try-to-own-next).
 Doctrine: VISION §2 (capture intent, never grant capability) and §3 (one
 self-contained binary).
 

@@ -10,13 +10,13 @@ for the working contract before starting any of these. The RFCs assume both.
 
 ## Index
 
-| # | Title | Roadmap | Doctrine | Touches |
+| # | Title | Reference | Doctrine | Touches |
 |---|---|---|---|---|
-| [0003](./0003-anti-detection-gate.md) | An anti-detection gate that runs the skeptic's own probes | [Direction 1](../ROADMAP.md#1-an-anti-detection-gate-that-runs-the-skeptics-own-probes) | measure | `internal/adversary` (new), `internal/testharness`, `internal/crosscheck` |
-| [0004](./0004-additional-services.md) | The services attackers try to own next | [Direction 2](../ROADMAP.md#2-the-services-attackers-try-to-own-next) | §2, §3 | `internal/proto/*` (new), `cmd/sweetty`, `internal/safety` |
-| [0005](./0005-bait-that-bites-back.md) | Bait that bites back after they leave | [Direction 3](../ROADMAP.md#3-bait-that-bites-back-after-they-leave) | §8 | `internal/fakehost`, `internal/shell`, `internal/config`, `cmd/sweetty` |
-| [0006](./0006-campaign-correlation.md) | The log as campaign intelligence | [Direction 4](../ROADMAP.md#4-the-log-as-campaign-intelligence) | §6 | `internal/portal` |
-| [0007](./0007-intelligence-export.md) | Intelligence that travels | [Direction 5](../ROADMAP.md#5-intelligence-that-travels) | §4 | `internal/portal` |
+| [0003](./0003-anti-detection-gate.md) | An anti-detection gate that runs the skeptic's own probes | [Adversary gate](../FEATURE-TREE.md#adversary-gate) | measure | `internal/adversary`, `internal/testharness`, `internal/crosscheck` |
+| [0004](./0004-additional-services.md) | The services attackers try to own next | [Direction 1](../ROADMAP.md#1-the-services-attackers-try-to-own-next) | §2, §3 | `internal/proto/*` (new), `cmd/sweetty`, `internal/safety` |
+| [0005](./0005-bait-that-bites-back.md) | Bait that bites back after they leave | [Direction 2](../ROADMAP.md#2-bait-that-bites-back-after-they-leave) | §8 | `internal/fakehost`, `internal/shell`, `internal/config`, `cmd/sweetty` |
+| [0006](./0006-campaign-correlation.md) | The log as campaign intelligence | [Direction 3](../ROADMAP.md#3-the-log-as-campaign-intelligence) | §6 | `internal/portal` |
+| [0007](./0007-intelligence-export.md) | Intelligence that travels | [Direction 4](../ROADMAP.md#4-intelligence-that-travels) | §4 | `internal/portal` |
 
 ## How each RFC is structured
 

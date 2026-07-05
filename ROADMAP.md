@@ -8,37 +8,14 @@ direction below names the doctrine it serves and the capability it already stand
 on.
 
 [FEATURE-TREE.md](./FEATURE-TREE.md) records what is built and verified, each
-entry citing its test. The directions here are not in it yet; they are where the
-capability set is going and why. The order runs from the seams a skeptic finds
-first to the intelligence the log can yield, so the earliest directions harden
-what the product already claims and the later ones extend what it is worth. Each
-direction links to a build-ready spec in [rfcs/](./rfcs/README.md), scoped to be
-picked up on its own.
+entry citing its test. The remaining directions here are where the capability set
+is going and why. The order runs from wider capture to the intelligence the log
+can yield. Each direction links to a build-ready spec in
+[rfcs/](./rfcs/README.md), scoped to be picked up on its own.
 
 ## Directions
 
-### 1. An anti-detection gate that runs the skeptic's own probes
-
-_Spec: [RFC 0003](./rfcs/0003-anti-detection-gate.md)._
-
-The measure of the product is surviving the first minutes of skeptical probing by
-someone who has read the source. The suite already guards coherence from the
-inside: one persona tells one story across every service (`internal/crosscheck`), a
-file that is listed can be read, `/proc` is synthetic and per-arch, the VFS cannot
-be escaped. What it does not yet do is take the attacker's side and run the tools a
-fingerprinter reaches for.
-
-The direction is a gate that stands a live instance up in CI and runs the probes a
-skeptic runs: the algorithm enumeration that would catch a banner-versus-crypto
-mismatch, the JARM and HASSH expectations, and the coherence checks that catch a
-box that is almost right, failing the build on any tell it finds. It builds on the
-harness that already spins services up for tests (`internal/testharness`) and on
-the cross-service coherence checks (`internal/crosscheck`), turning internal
-invariants into an adversarial pass. It makes the vision's stated measure something
-the gate enforces rather than something the author hopes holds, and it is what the
-early hardening directions earn their place by passing.
-
-### 2. The services attackers try to own next
+### 1. The services attackers try to own next
 
 _Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
 
@@ -59,7 +36,7 @@ nothing fetched, nothing run, nothing written to the host. It is §2 and §3 app
 to a wider door, and it costs the doctrine nothing, because the boundary already
 holds every handler by construction.
 
-### 3. Bait that bites back after they leave
+### 2. Bait that bites back after they leave
 
 _Spec: [RFC 0005](./rfcs/0005-bait-that-bites-back.md)._
 
@@ -80,7 +57,7 @@ is what fires. It extends §8 from the moment of the grab to the moment of the u
 and it keeps the reveal culture the box already has, since the operator still gets
 the payoff, now with a second act.
 
-### 4. The log as campaign intelligence
+### 3. The log as campaign intelligence
 
 _Spec: [RFC 0006](./rfcs/0006-campaign-correlation.md)._
 
@@ -101,7 +78,7 @@ rollup that already exist, the per-source assessment and the `DOWNLOAD_ATTEMPT` 
 reads. It is §6, the loud dashboard, taken from what one source did to what one
 campaign is doing.
 
-### 5. Intelligence that travels
+### 4. Intelligence that travels
 
 _Spec: [RFC 0007](./rfcs/0007-intelligence-export.md)._
 
