@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"io"
@@ -29,8 +30,30 @@ func TestMySQLHandshakeMatchesPersona(t *testing.T) {
 	if greeting.plugin != "mysql_native_password" {
 		t.Fatalf("auth plugin = %q, want mysql_native_password", greeting.plugin)
 	}
+	if greeting.connectionID == 0 {
+		t.Fatal("connection id is zero")
+	}
+	if len(greeting.salt) != authSaltLen {
+		t.Fatalf("salt length = %d, want %d", len(greeting.salt), authSaltLen)
+	}
 	if !greeting.hasCapability(clientProtocol41) || !greeting.hasCapability(clientSecureConnection) || !greeting.hasCapability(clientPluginAuth) {
 		t.Fatalf("handshake capabilities %#x do not include protocol41, secure connection, and plugin auth", greeting.capabilities)
+	}
+}
+
+func TestMySQLHandshakeSaltVariesPerConnection(t *testing.T) {
+	p := persona.GenerateProfile("infra")
+	first := mysqlGreetingForPersona(t, p)
+	second := mysqlGreetingForPersona(t, p)
+
+	if first.version != second.version {
+		t.Fatalf("same persona yielded versions %q and %q", first.version, second.version)
+	}
+	if bytes.Equal(first.salt, second.salt) {
+		t.Fatalf("two MySQL handshakes reused auth salt %q", first.salt)
+	}
+	if first.connectionID == second.connectionID {
+		t.Fatalf("two MySQL handshakes reused connection id %d", first.connectionID)
 	}
 }
 
@@ -100,6 +123,16 @@ func setupMySQL(t *testing.T) (*testharness.Harness, *persona.Persona) {
 	return h, p
 }
 
+func mysqlGreetingForPersona(t *testing.T, p *persona.Persona) mysqlGreeting {
+	t.Helper()
+	h, err := testharness.New(New(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	return parseMySQLGreeting(t, mysqlReadPacket(t, h).payload)
+}
+
 type mysqlPacket struct {
 	seq     byte
 	payload []byte
@@ -136,6 +169,8 @@ func mysqlPacketHeader(n int, seq byte) []byte {
 type mysqlGreeting struct {
 	protocol     byte
 	version      string
+	connectionID uint32
+	salt         []byte
 	capabilities uint32
 	plugin       string
 }
@@ -156,7 +191,10 @@ func parseMySQLGreeting(t *testing.T, payload []byte) mysqlGreeting {
 	if len(payload) < pos+4+8+1+2+1+2+2+1+10 {
 		t.Fatalf("handshake payload truncated after server version: %q", payload)
 	}
-	pos += 4 + 8 + 1
+	connectionID := binary.LittleEndian.Uint32(payload[pos : pos+4])
+	pos += 4
+	salt := append([]byte(nil), payload[pos:pos+authSaltPart1Len]...)
+	pos += authSaltPart1Len + 1
 	lower := binary.LittleEndian.Uint16(payload[pos : pos+2])
 	pos += 2 + 1 + 2
 	upper := binary.LittleEndian.Uint16(payload[pos : pos+2])
@@ -164,8 +202,16 @@ func parseMySQLGreeting(t *testing.T, payload []byte) mysqlGreeting {
 	authLen := int(payload[pos])
 	pos += 1 + 10
 	pluginStart := pos
-	if authLen > 8 {
-		pos += authLen - 8
+	if authLen > authSaltPart1Len {
+		secondLen := authLen - authSaltPart1Len - 1
+		if secondLen < 0 {
+			secondLen = 0
+		}
+		if pos+secondLen > len(payload) {
+			t.Fatalf("handshake auth data overruns payload")
+		}
+		salt = append(salt, payload[pos:pos+secondLen]...)
+		pos += secondLen + 1
 	} else {
 		pos += 13
 	}
@@ -182,6 +228,8 @@ func parseMySQLGreeting(t *testing.T, payload []byte) mysqlGreeting {
 	return mysqlGreeting{
 		protocol:     payload[0],
 		version:      version,
+		connectionID: connectionID,
+		salt:         salt,
 		capabilities: uint32(lower) | uint32(upper)<<16,
 		plugin:       string(pluginBytes),
 	}
