@@ -13,19 +13,20 @@ import (
 // of segfaulting. A prober enumerates the toolchain in the first minute; an
 // interpreter that is installed yet fails even `--version` is a conclusive tell.
 func TestInterpreterVersionProbe(t *testing.T) {
+	p := persona.Generate()
 	cases := map[string]string{
 		"python3": "Python 3.",
 		"perl":    "perl 5",
-		"php":     "PHP 8.",
-		"node":    "v12.",
+		"php":     "PHP " + p.PHPVersion(),
+		"node":    "v",
 	}
 	for bin, want := range cases {
-		got, ok := interpVersion([]string{bin, "--version"})
+		got, ok := interpVersion(p, []string{bin, "--version"})
 		if !ok || !strings.Contains(got, want) {
 			t.Errorf("%s --version = %q (ok=%v), want to contain %q", bin, got, ok, want)
 		}
 	}
-	if _, ok := interpVersion([]string{"python3", "-c", "print(1)"}); ok {
+	if _, ok := interpVersion(p, []string{"python3", "-c", "print(1)"}); ok {
 		t.Error("a -c run must not be treated as a version probe")
 	}
 }

@@ -168,7 +168,7 @@ func (sh *Shell) prompt() string {
 func (sh *Shell) welcome() {
 	// PrettyName already begins with "Ubuntu", so do not prepend it again.
 	sh.s.SlowWrite("\r\nWelcome to "+sh.p.PrettyName+" (GNU/Linux "+sh.p.KernelRel+" "+sh.p.Arch+")\r\n\r\n", 8*time.Millisecond)
-	// The stock 22.04 MOTD header is an invariant triplet; one lone line is a tell.
+	// The stock Ubuntu MOTD header is an invariant triplet; one lone line is a tell.
 	sh.s.Writeln(" * Documentation:  https://help.ubuntu.com")
 	sh.s.Writeln(" * Management:     https://landscape.canonical.com")
 	sh.s.Writeln(" * Support:        https://ubuntu.com/pro")

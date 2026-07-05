@@ -1,12 +1,9 @@
 package ssh_test
 
-// Bot-fidelity pins for the SSH surface. SSH presents a real OpenSSH banner and
-// then deliberately never completes the handshake (the documented dead-handshake
-// trade, README + package doc): no session can be established, but a scanner sees a
-// banner with no KEXINIT. That trade is conscious and acceptable; these tests pin
-// it so it can never silently regress into a partial/malformed handshake (which
-// would be a worse, accidental tell) and so the banner bytes can never drift from a
-// real OpenSSH+Ubuntu package string.
+// Bot-fidelity pins for the SSH tarpit surface. The tarpit presents a real OpenSSH
+// banner and then deliberately never completes the handshake: no session can be
+// established, but a scanner sees a banner with no KEXINIT. The interactive SSH
+// service is covered by the handshake tests.
 
 import (
 	"regexp"

@@ -12,13 +12,12 @@ for the working contract before starting any of these. The RFCs assume both.
 
 | # | Title | Roadmap | Doctrine | Touches |
 |---|---|---|---|---|
-| [0001](./0001-ssh-crypto-profile.md) | A version-coherent SSH cryptographic profile | [Direction 1](../ROADMAP.md#1-a-version-coherent-ssh-cryptographic-profile) | §1, §7 | `internal/proto/ssh`, `internal/persona` |
-| [0002](./0002-per-instance-filesystem-population.md) | Per-instance filesystem population | [Direction 2](../ROADMAP.md#2-per-instance-filesystem-population) | §7 | `internal/fakehost`, `internal/vfs`, `internal/persona` |
-| [0003](./0003-anti-detection-gate.md) | An anti-detection gate that runs the skeptic's own probes | [Direction 3](../ROADMAP.md#3-an-anti-detection-gate-that-runs-the-skeptics-own-probes) | measure | `internal/adversary` (new), `internal/testharness`, `internal/crosscheck` |
-| [0004](./0004-additional-services.md) | The services attackers try to own next | [Direction 4](../ROADMAP.md#4-the-services-attackers-try-to-own-next) | §2, §3 | `internal/proto/*` (new), `cmd/sweetty`, `internal/safety` |
-| [0005](./0005-bait-that-bites-back.md) | Bait that bites back after they leave | [Direction 5](../ROADMAP.md#5-bait-that-bites-back-after-they-leave) | §8 | `internal/fakehost`, `internal/shell`, `internal/config`, `cmd/sweetty` |
-| [0006](./0006-campaign-correlation.md) | The log as campaign intelligence | [Direction 6](../ROADMAP.md#6-the-log-as-campaign-intelligence) | §6 | `internal/portal` |
-| [0007](./0007-intelligence-export.md) | Intelligence that travels | [Direction 7](../ROADMAP.md#7-intelligence-that-travels) | §4 | `internal/portal` |
+| [0002](./0002-per-instance-filesystem-population.md) | Per-instance filesystem population | [Direction 1](../ROADMAP.md#1-per-instance-filesystem-population) | §7 | `internal/fakehost`, `internal/vfs`, `internal/persona` |
+| [0003](./0003-anti-detection-gate.md) | An anti-detection gate that runs the skeptic's own probes | [Direction 2](../ROADMAP.md#2-an-anti-detection-gate-that-runs-the-skeptics-own-probes) | measure | `internal/adversary` (new), `internal/testharness`, `internal/crosscheck` |
+| [0004](./0004-additional-services.md) | The services attackers try to own next | [Direction 3](../ROADMAP.md#3-the-services-attackers-try-to-own-next) | §2, §3 | `internal/proto/*` (new), `cmd/sweetty`, `internal/safety` |
+| [0005](./0005-bait-that-bites-back.md) | Bait that bites back after they leave | [Direction 4](../ROADMAP.md#4-bait-that-bites-back-after-they-leave) | §8 | `internal/fakehost`, `internal/shell`, `internal/config`, `cmd/sweetty` |
+| [0006](./0006-campaign-correlation.md) | The log as campaign intelligence | [Direction 5](../ROADMAP.md#5-the-log-as-campaign-intelligence) | §6 | `internal/portal` |
+| [0007](./0007-intelligence-export.md) | Intelligence that travels | [Direction 6](../ROADMAP.md#6-intelligence-that-travels) | §4 | `internal/portal` |
 
 ## How each RFC is structured
 

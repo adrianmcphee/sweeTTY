@@ -1,7 +1,7 @@
-PRETTY_NAME="Ubuntu 22.04.4 LTS"
+PRETTY_NAME="{{.PrettyName}}"
 NAME="Ubuntu"
-VERSION_ID="22.04"
-VERSION="22.04.4 LTS (Jammy Jellyfish)"
-VERSION_CODENAME=jammy
+VERSION_ID="{{.OSVersionID}}"
+VERSION="{{.OSVersion}}"
+VERSION_CODENAME={{.OSCodename}}
 ID=ubuntu
 ID_LIKE=debian

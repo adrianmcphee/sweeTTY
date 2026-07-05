@@ -11,10 +11,12 @@
 // banner-and-tarpit design. The cost is that a real handshake exposes this Go SSH
 // stack's algorithm fingerprint (its KEX/cipher/MAC list, i.e. its HASSH), which a
 // determined fingerprinter can tell apart from a genuine OpenSSH server even though
-// the banner matches. The gain is the whole point of an SSH honeypot: full capture
-// of credentials, commands, payloads, and the post-login behaviour of a bot that
-// believes it is in. The pure banner-and-tarpit remains available as NewTarpit for
-// ports where zero crypto fingerprint matters more than interaction.
+// the banner matches. The offered lists derive from the same persona OpenSSH
+// version as the banner, reduced to what x/crypto can negotiate. The gain is the
+// whole point of an SSH honeypot: full capture of credentials, commands, payloads,
+// and the post-login behaviour of a bot that believes it is in. The pure
+// banner-and-tarpit remains available as NewTarpit for ports where zero crypto
+// fingerprint matters more than interaction.
 package ssh
 
 import (
@@ -143,26 +145,10 @@ func (pr *Protocol) Handle(s *server.Session) {
 			return nil, errAuthFailed
 		},
 	}
-	// Order the key-exchange, cipher, and MAC lists toward what OpenSSH 8.9 offers,
-	// rather than shipping the Go crypto library's own default ordering. The banner
-	// claims OpenSSH, so a raw Go algorithm list is an easy nmap ssh2-enum-algos tell;
-	// this narrows the gap to the residual algorithms x/crypto does not implement
-	// (sntrup, umac), which stays the documented, accepted price of completing a real
-	// handshake. Only names x/crypto supports are listed, so the handshake still works.
-	cfg.KeyExchanges = []string{
-		"curve25519-sha256", "curve25519-sha256@libssh.org",
-		"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
-		"diffie-hellman-group14-sha256",
-	}
-	cfg.Ciphers = []string{
-		"chacha20-poly1305@openssh.com",
-		"aes128-gcm@openssh.com", "aes256-gcm@openssh.com",
-		"aes128-ctr", "aes192-ctr", "aes256-ctr",
-	}
-	cfg.MACs = []string{
-		"hmac-sha2-256-etm@openssh.com", "hmac-sha2-512-etm@openssh.com",
-		"hmac-sha2-256", "hmac-sha2-512",
-	}
+	prof := profileFor(pr.p.OpenSSHVer)
+	cfg.KeyExchanges = prof.kex
+	cfg.Ciphers = prof.ciphers
+	cfg.MACs = prof.macs
 	cfg.AddHostKey(signer)
 
 	// Deadline the handshake on the bare conn: gossh reads the client banner and

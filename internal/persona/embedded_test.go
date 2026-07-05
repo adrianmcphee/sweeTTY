@@ -44,8 +44,9 @@ func TestServerProfilesStayX86(t *testing.T) {
 // (Ubuntu ships the same release on amd64 and arm64); only the architecture moves.
 // A divergent kernel string would let a scanner separate the two fleets.
 func TestOSImageOnlyArchDiffersByProfile(t *testing.T) {
-	aArch, aRel, aVer, aPretty := osImage("legacy")
-	bArch, bRel, bVer, bPretty := osImage("web")
+	rel := osReleasePool[0]
+	aArch, aRel, aVer, aPretty := osImage("legacy", rel)
+	bArch, bRel, bVer, bPretty := osImage("web", rel)
 	if aArch == bArch {
 		t.Fatalf("legacy and server arch should differ, both %q", aArch)
 	}

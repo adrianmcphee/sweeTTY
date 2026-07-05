@@ -94,14 +94,14 @@ func (sh *Shell) cmdResolve(args []string) (string, int) {
 	case "host":
 		return fmt.Sprintf("%s has address %s\n", name, ip), 0
 	default: // dig
-		return fmt.Sprintf("; <<>> DiG 9.18.12-0ubuntu0.22.04.1-Ubuntu <<>> %s\n"+
+		return fmt.Sprintf("; <<>> DiG %s <<>> %s\n"+
 			";; global options: +cmd\n;; Got answer:\n"+
 			";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: %d\n"+
 			";; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1\n\n"+
 			";; QUESTION SECTION:\n;%s.\t\t\tIN\tA\n\n"+
 			";; ANSWER SECTION:\n%s.\t300\tIN\tA\t%s\n\n"+
 			";; Query time: %d msec\n;; SERVER: %s#53(%s) (UDP)\n;; MSG SIZE  rcvd: %d\n",
-			name, fnv32(name)%65535, name, name, ip, int(fnv32(name)%40)+8, sh.p.GatewayIP, sh.p.GatewayIP, len(name)+45), 0
+			sh.p.DigVersion(), name, fnv32(name)%65535, name, name, ip, int(fnv32(name)%40)+8, sh.p.GatewayIP, sh.p.GatewayIP, len(name)+45), 0
 	}
 }
 

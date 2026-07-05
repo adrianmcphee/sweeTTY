@@ -203,3 +203,29 @@ func TestSoftwareVersionsVaryAndAreInPool(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenSSHVersionCarriesMatchingUbuntuRelease(t *testing.T) {
+	for _, rel := range osReleasePool {
+		p := &Persona{OpenSSHVer: rel.openSSH}
+		if p.OSVersionID() != rel.version {
+			t.Errorf("%s maps to VERSION_ID %q, want %q", rel.openSSH, p.OSVersionID(), rel.version)
+		}
+		if p.OSCodename() != rel.codename {
+			t.Errorf("%s maps to codename %q, want %q", rel.openSSH, p.OSCodename(), rel.codename)
+		}
+		if p.GCCPackage() != rel.gccPkg || p.DigVersion() != rel.dig {
+			t.Errorf("%s maps to incoherent tool versions: gcc=%q dig=%q", rel.openSSH, p.GCCPackage(), p.DigVersion())
+		}
+	}
+
+	for range 80 {
+		p := Generate()
+		rel := osReleaseFor(p.OpenSSHVer)
+		if p.PrettyName != rel.pretty {
+			t.Fatalf("generated OpenSSH %q with PrettyName %q, want %q", p.OpenSSHVer, p.PrettyName, rel.pretty)
+		}
+		if p.KernelRel != rel.kernel {
+			t.Fatalf("generated OpenSSH %q with kernel %q, want %q", p.OpenSSHVer, p.KernelRel, rel.kernel)
+		}
+	}
+}

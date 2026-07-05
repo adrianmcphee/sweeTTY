@@ -8,7 +8,7 @@ import (
 
 // The post-login banner must read like a real Ubuntu serial console: the welcome
 // line carries the release exactly once (not "Welcome to Ubuntu Ubuntu ..."), and
-// the stock 22.04 MOTD header triplet (Documentation/Management/Support) is present
+// the stock Ubuntu MOTD header triplet (Documentation/Management/Support) is present
 // — a lone Documentation line is impossible on a real box.
 func TestUbuntuWelcomeAndMOTD(t *testing.T) {
 	h, p := setup(t, "ubuntu")

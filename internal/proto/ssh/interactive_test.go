@@ -299,3 +299,47 @@ func TestSSHExecCapturesIntentWithoutFetching(t *testing.T) {
 		t.Errorf("download event did not capture the attacker's target: %+v", ev)
 	}
 }
+
+// TestSkepticProbesSeeOneReleaseStory drives the SSH service like a cautious human
+// or fingerprinting script: read the banner, land a shell, then compare the OS
+// release, kernel, proc version, compiler, interpreter, resolver, and apt suite.
+// These are exactly the cheap contradictions that make a honeypot feel assembled
+// from unrelated canned strings.
+func TestSkepticProbesSeeOneReleaseStory(t *testing.T) {
+	h, p := newSSH(t)
+	client, err := dial(t, h, "root", p.RootPassword)
+	if err != nil {
+		t.Fatalf("auth failed: %v", err)
+	}
+	defer client.Close()
+
+	if got := string(client.ServerVersion()); !strings.Contains(got, p.OpenSSHVer) {
+		t.Fatalf("SSH server version %q does not carry persona OpenSSH %q", got, p.OpenSSHVer)
+	}
+
+	sess, err := client.NewSession()
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	out, err := sess.CombinedOutput("cat /etc/os-release; uname -r; cat /proc/version; gcc --version; python3 --version; dig example.com; apt-get update")
+	if err != nil {
+		t.Fatalf("run skeptic probe script: %v\n%s", err, out)
+	}
+	got := string(out)
+	for _, want := range []string{
+		`PRETTY_NAME="` + p.PrettyName + `"`,
+		`VERSION_ID="` + p.OSVersionID() + `"`,
+		`VERSION_CODENAME=` + p.OSCodename(),
+		p.KernelRel,
+		p.GCCPackage(),
+		p.GCCVersion(),
+		"Python " + p.PythonVersion(),
+		"DiG " + p.DigVersion(),
+		"ubuntu " + p.OSCodename() + " InRelease",
+		"ubuntu " + p.OSCodename() + "-updates InRelease",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("skeptic probe output missing %q:\n%s", want, got)
+		}
+	}
+}

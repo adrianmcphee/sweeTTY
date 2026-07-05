@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sweetty/internal/persona"
 	"sweetty/internal/server"
 	"sweetty/internal/util"
 )
@@ -513,11 +514,11 @@ func fnv32(s string) uint32 {
 }
 
 // interpVersion answers a version probe (--version / -V / -v) for a scripting
-// interpreter with a real jammy version string, so `python3 --version` and friends
-// do not segfault the way a payload run does. A prober enumerates the toolchain in
-// the first minute; an interpreter that is "installed" yet fails even a version
-// check is a conclusive tell.
-func interpVersion(args []string) (string, bool) {
+// interpreter with a version string from the same Ubuntu release as the persona,
+// so `python3 --version` and friends do not segfault the way a payload run does.
+// A prober enumerates the toolchain in the first minute; an interpreter that is
+// "installed" yet fails even a version check is a conclusive tell.
+func interpVersion(p *persona.Persona, args []string) (string, bool) {
 	probe := false
 	for _, a := range args[1:] {
 		if a == "--version" || a == "-V" || a == "-v" {
@@ -529,22 +530,22 @@ func interpVersion(args []string) (string, bool) {
 	}
 	switch {
 	case strings.HasPrefix(args[0], "python"):
-		return "Python 3.10.12", true
+		return "Python " + p.PythonVersion(), true
 	case args[0] == "perl":
-		return "\nThis is perl 5, version 34, subversion 0 (v5.34.0) built for x86_64-linux-gnu-thread-multi\n\n" +
+		return "\nThis is perl 5, version " + p.PerlSubversion() + ", subversion 0 (v5." + p.PerlSubversion() + ".0) built for x86_64-linux-gnu-thread-multi\n\n" +
 			"Copyright 1987-2022, Larry Wall\n", true
 	case args[0] == "ruby":
-		return "ruby 3.0.2p107 (2021-07-07 revision 0db68f0233) [x86_64-linux-gnu]", true
+		return "ruby " + p.RubyVersion() + " (2021-07-07 revision 0db68f0233) [x86_64-linux-gnu]", true
 	case args[0] == "node" || args[0] == "nodejs":
-		return "v12.22.9", true
+		return p.NodeVersion(), true
 	case args[0] == "php":
-		return "PHP 8.1.2 (cli) (built: Feb 25 2022 16:14:04) (NTS)", true
+		return "PHP " + p.PHPVersion() + " (cli) (built: Feb 25 2022 16:14:04) (NTS)", true
 	}
 	return "", false
 }
 
 func (sh *Shell) iInterp(args []string) int {
-	if v, ok := interpVersion(args); ok {
+	if v, ok := interpVersion(sh.p, args); ok {
 		sh.s.Writeln(v)
 		return 0
 	}
@@ -695,11 +696,11 @@ func (sh *Shell) iCompile(args []string) int {
 			case "make":
 				sh.s.Writeln("GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.")
 			case "cc", "gcc":
-				sh.s.Writeln("gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.")
+				sh.s.Writeln("gcc (Ubuntu " + sh.p.GCCPackage() + ") " + sh.p.GCCVersion() + "\nCopyright (C) 2021 Free Software Foundation, Inc.")
 			case "g++":
-				sh.s.Writeln("g++ (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.")
+				sh.s.Writeln("g++ (Ubuntu " + sh.p.GCCPackage() + ") " + sh.p.GCCVersion() + "\nCopyright (C) 2021 Free Software Foundation, Inc.")
 			default:
-				sh.s.Writeln(args[0] + " (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0")
+				sh.s.Writeln(args[0] + " (Ubuntu " + sh.p.GCCPackage() + ") " + sh.p.GCCVersion())
 			}
 			return 0
 		}
@@ -758,7 +759,7 @@ func (sh *Shell) iApt(args []string) int {
 		sh.s.Writeln(fmt.Sprintf("0 upgraded, %d newly installed, 0 to remove and 0 not upgraded.", len(pkgs)))
 		sh.pause(800 * time.Millisecond)
 		for _, pkg := range pkgs {
-			sh.s.Writeln("Get:1 http://archive.ubuntu.com/ubuntu jammy/universe amd64 " + pkg + " amd64 1.0-1 [1,024 kB]")
+			sh.s.Writeln("Get:1 http://archive.ubuntu.com/ubuntu " + sh.p.OSCodename() + "/universe amd64 " + pkg + " amd64 1.0-1 [1,024 kB]")
 		}
 		sh.s.Writeln("Fetched 1,024 kB in 1s (980 kB/s)")
 		sh.pause(600 * time.Millisecond)
@@ -768,11 +769,11 @@ func (sh *Shell) iApt(args []string) int {
 			sh.s.Writeln("Setting up " + pkg + " (1.0-1) ...")
 			_ = sh.fs.WriteFile(sh.fs.Resolve("/usr/bin/"+pkg), elfStub())
 		}
-		sh.s.Writeln("Processing triggers for man-db (2.10.2-1) ...")
+		sh.s.Writeln("Processing triggers for man-db (" + sh.p.ManDBVersion() + ") ...")
 		return 0
 	case "update":
-		sh.s.Writeln("Hit:1 http://archive.ubuntu.com/ubuntu jammy InRelease")
-		sh.s.Writeln("Get:2 http://archive.ubuntu.com/ubuntu jammy-updates InRelease [119 kB]")
+		sh.s.Writeln("Hit:1 http://archive.ubuntu.com/ubuntu " + sh.p.OSCodename() + " InRelease")
+		sh.s.Writeln("Get:2 http://archive.ubuntu.com/ubuntu " + sh.p.OSCodename() + "-updates InRelease [119 kB]")
 		sh.pause(700 * time.Millisecond)
 		sh.s.Writeln("Fetched 119 kB in 1s (140 kB/s)")
 		sh.s.Writeln("Reading package lists... Done")

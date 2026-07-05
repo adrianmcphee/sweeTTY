@@ -1,1 +1,1 @@
-Linux version {{.KernelRel}} (buildd@{{if .Embedded}}bos02-arm64-016{{else}}lcy02-amd64-045{{end}}) (gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0, GNU ld (GNU Binutils for Ubuntu) 2.38) {{.KernelVer}}
+Linux version {{.KernelRel}} (buildd@{{if .Embedded}}bos02-arm64-016{{else}}lcy02-amd64-045{{end}}) (gcc (Ubuntu {{.GCCPackage}}) {{.GCCVersion}}, GNU ld (GNU Binutils for Ubuntu) {{.BinutilsVersion}}) {{.KernelVer}}

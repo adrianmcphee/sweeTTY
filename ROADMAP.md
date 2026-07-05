@@ -17,36 +17,7 @@ picked up on its own.
 
 ## Directions
 
-### 1. A version-coherent SSH cryptographic profile
-
-_Spec: [RFC 0001](./rfcs/0001-ssh-crypto-profile.md)._
-
-The SSH service completes a real handshake so it can capture a whole session, and
-the vision concedes the price openly: the key-exchange and cipher list belong to
-this Go SSH stack, not to the OpenSSH release the banner claims. The algorithm
-lists are already ordered toward a modern OpenSSH offer
-(`internal/proto/ssh/ssh.go`), which removes the crudest form of the tell, but the
-list is one fixed constant while the banner version is drawn per instance from the
-persona (`persona.OpenSSHVer`). Two seams remain. A persona that advertises one
-OpenSSH release while offering another release's exact algorithm set is a
-contradiction a single `ssh2-enum-algos` scan surfaces, and because the list is a
-constant in the public source, every instance presents the identical algorithm
-fingerprint, which is precisely the shared, source-derived signature §7 exists to
-remove.
-
-The direction is to derive the key-exchange, cipher, and MAC lists and their order
-from the OpenSSH version the persona advertises, from a small table of what each
-release actually offers, so the algorithm fingerprint matches the banner and
-varies across instances the way the banner already does. It builds on identity
-SweeTTY already generates: the persona picks the OpenSSH version
-(`internal/persona`), and the SSH server already sets the three lists in one place.
-The residual gap, the algorithms `x/crypto` does not implement, stays the
-documented, accepted price, and the pure banner-and-tarpit persona with no
-handshake and no fingerprint stays available where deflection matters more than a
-session. This is §1 coherence and §7 unpredictability applied to the one surface
-the vision names as its conceded seam.
-
-### 2. Per-instance filesystem population
+### 1. Per-instance filesystem population
 
 _Spec: [RFC 0002](./rfcs/0002-per-instance-filesystem-population.md)._
 
@@ -72,7 +43,7 @@ generator and no external call at runtime. It is §7 carried from identity value
 which already vary, to the structure and content of the filesystem, which does not
 yet.
 
-### 3. An anti-detection gate that runs the skeptic's own probes
+### 2. An anti-detection gate that runs the skeptic's own probes
 
 _Spec: [RFC 0003](./rfcs/0003-anti-detection-gate.md)._
 
@@ -91,9 +62,9 @@ harness that already spins services up for tests (`internal/testharness`) and on
 the cross-service coherence checks (`internal/crosscheck`), turning internal
 invariants into an adversarial pass. It makes the vision's stated measure something
 the gate enforces rather than something the author hopes holds, and it is what the
-first two directions earn their place by passing.
+early hardening directions earn their place by passing.
 
-### 4. The services attackers try to own next
+### 3. The services attackers try to own next
 
 _Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
 
@@ -114,7 +85,7 @@ nothing fetched, nothing run, nothing written to the host. It is §2 and §3 app
 to a wider door, and it costs the doctrine nothing, because the boundary already
 holds every handler by construction.
 
-### 5. Bait that bites back after they leave
+### 4. Bait that bites back after they leave
 
 _Spec: [RFC 0005](./rfcs/0005-bait-that-bites-back.md)._
 
@@ -135,7 +106,7 @@ is what fires. It extends §8 from the moment of the grab to the moment of the u
 and it keeps the reveal culture the box already has, since the operator still gets
 the payoff, now with a second act.
 
-### 6. The log as campaign intelligence
+### 5. The log as campaign intelligence
 
 _Spec: [RFC 0006](./rfcs/0006-campaign-correlation.md)._
 
@@ -156,7 +127,7 @@ rollup that already exist, the per-source assessment and the `DOWNLOAD_ATTEMPT` 
 reads. It is §6, the loud dashboard, taken from what one source did to what one
 campaign is doing.
 
-### 7. Intelligence that travels
+### 6. Intelligence that travels
 
 _Spec: [RFC 0007](./rfcs/0007-intelligence-export.md)._
 

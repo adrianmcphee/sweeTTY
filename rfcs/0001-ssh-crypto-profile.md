@@ -1,6 +1,5 @@
 # RFC 0001: A version-coherent SSH cryptographic profile
 
-Roadmap: [Direction 1](../ROADMAP.md#1-a-version-coherent-ssh-cryptographic-profile).
 Doctrine: VISION §1 (coherence) and §7 (unpredictable from the source).
 
 ## Problem

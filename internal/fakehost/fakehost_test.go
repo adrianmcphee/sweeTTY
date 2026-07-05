@@ -16,9 +16,12 @@ import (
 var templatedFiles = []string{
 	"/etc/hostname",
 	"/etc/hosts",
+	"/etc/issue",
+	"/etc/os-release",
 	"/etc/shadow",
 	"/etc/fstab",
 	"/etc/machine-id",
+	"/proc/version",
 	"/root/.bash_history",
 	"/root/.ssh/authorized_keys",
 	"/root/.ssh/known_hosts",
@@ -57,6 +60,57 @@ func TestLoadRendersInstanceIdentity(t *testing.T) {
 	}
 	if !bytes.Contains(hosts, []byte(p.HostIP)) || !bytes.Contains(hosts, []byte(p.DBHost)) {
 		t.Fatal("/etc/hosts not rendered with instance addresses")
+	}
+}
+
+func TestReleaseFilesRenderPersonaRelease(t *testing.T) {
+	p := persona.Generate()
+	fsys, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+
+	osr, err := sess.ReadFile("/etc/os-release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`PRETTY_NAME="` + p.PrettyName + `"`,
+		`VERSION_ID="` + p.OSVersionID() + `"`,
+		`VERSION_CODENAME=` + p.OSCodename(),
+	} {
+		if !bytes.Contains(osr, []byte(want)) {
+			t.Fatalf("/etc/os-release missing %q:\n%s", want, osr)
+		}
+	}
+
+	proc, err := sess.ReadFile("/proc/version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{p.KernelRel, p.GCCPackage(), p.BinutilsVersion()} {
+		if !bytes.Contains(proc, []byte(want)) {
+			t.Fatalf("/proc/version missing %q:\n%s", want, proc)
+		}
+	}
+}
+
+func TestNASReleaseFileRendersPersonaRelease(t *testing.T) {
+	p := persona.Generate()
+	fsys, err := LoadNAS(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+	osr, err := sess.ReadFile("/etc/os-release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{p.PrettyName, p.OSVersionID(), p.OSCodename()} {
+		if !bytes.Contains(osr, []byte(want)) {
+			t.Fatalf("NAS /etc/os-release missing %q:\n%s", want, osr)
+		}
 	}
 }
 

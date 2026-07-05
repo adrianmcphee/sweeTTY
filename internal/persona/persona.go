@@ -124,17 +124,131 @@ func (p *Persona) Uname() string {
 // the device role (a router/IoT/NAS hostname) with an Intel Xeon.
 func (p *Persona) Embedded() bool { return p.Arch != "x86_64" }
 
+type osReleaseDef struct {
+	openSSH  string
+	pretty   string
+	kernel   string
+	kernelV  string
+	version  string
+	label    string
+	codename string
+	gccPkg   string
+	gccVer   string
+	binutils string
+	dig      string
+	python   string
+	perl     string
+	ruby     string
+	node     string
+	php      string
+	manDB    string
+}
+
+var osReleasePool = []osReleaseDef{
+	{
+		openSSH: "OpenSSH_8.2p1 Ubuntu-4ubuntu0.11",
+		pretty:  "Ubuntu 20.04.6 LTS", kernel: "5.4.0-182-generic",
+		kernelV: "#202-Ubuntu SMP Fri Apr 26 12:29:36 UTC 2024",
+		version: "20.04", label: "20.04.6 LTS (Focal Fossa)", codename: "focal",
+		gccPkg: "9.4.0-1ubuntu1~20.04.2", gccVer: "9.4.0", binutils: "2.34",
+		dig: "9.16.1-Ubuntu", python: "3.8.10", perl: "32", ruby: "2.7.0p0",
+		node: "v10.19.0", php: "7.4.3", manDB: "2.9.1-1",
+	},
+	{
+		openSSH: "OpenSSH_8.9p1 Ubuntu-3ubuntu0.11",
+		pretty:  "Ubuntu 22.04.4 LTS", kernel: "5.15.0-105-generic",
+		kernelV: "#115-Ubuntu SMP Mon Apr 15 09:52:04 UTC 2024",
+		version: "22.04", label: "22.04.4 LTS (Jammy Jellyfish)", codename: "jammy",
+		gccPkg: "11.4.0-1ubuntu1~22.04", gccVer: "11.4.0", binutils: "2.38",
+		dig: "9.18.12-0ubuntu0.22.04.1-Ubuntu", python: "3.10.12", perl: "34",
+		ruby: "3.0.2p107", node: "v12.22.9", php: "8.1.2", manDB: "2.10.2-1",
+	},
+	{
+		openSSH: "OpenSSH_9.0p1 Ubuntu-1ubuntu8.10",
+		pretty:  "Ubuntu 22.10", kernel: "5.19.0-50-generic",
+		kernelV: "#50-Ubuntu SMP PREEMPT_DYNAMIC Mon Jul 10 18:10:59 UTC 2023",
+		version: "22.10", label: "22.10 (Kinetic Kudu)", codename: "kinetic",
+		gccPkg: "12.2.0-3ubuntu1", gccVer: "12.2.0", binutils: "2.39",
+		dig: "9.18.4-2ubuntu2.5-Ubuntu", python: "3.10.7", perl: "36",
+		ruby: "3.0.4", node: "v18.7.0", php: "8.1.7", manDB: "2.10.2-2",
+	},
+	{
+		openSSH: "OpenSSH_9.6p1 Ubuntu-3ubuntu13.5",
+		pretty:  "Ubuntu 24.04.2 LTS", kernel: "6.8.0-63-generic",
+		kernelV: "#66-Ubuntu SMP PREEMPT_DYNAMIC Fri Jun 13 20:25:30 UTC 2025",
+		version: "24.04", label: "24.04.2 LTS (Noble Numbat)", codename: "noble",
+		gccPkg: "13.2.0-23ubuntu4", gccVer: "13.2.0", binutils: "2.42",
+		dig: "9.18.30-0ubuntu0.24.04.2-Ubuntu", python: "3.12.3", perl: "38",
+		ruby: "3.2.3", node: "v18.19.1", php: "8.3.6", manDB: "2.12.0-4build2",
+	},
+}
+
+func openSSHVersions() []string {
+	out := make([]string, 0, len(osReleasePool))
+	for _, rel := range osReleasePool {
+		out = append(out, rel.openSSH)
+	}
+	return out
+}
+
+func osReleaseFor(openSSH string) osReleaseDef {
+	key := openSSHMajorMinor(openSSH)
+	for _, rel := range osReleasePool {
+		if openSSHMajorMinor(rel.openSSH) == key {
+			return rel
+		}
+	}
+	return osReleasePool[1]
+}
+
+func openSSHMajorMinor(openSSH string) string {
+	const marker = "OpenSSH_"
+	if i := strings.Index(openSSH, marker); i >= 0 {
+		openSSH = openSSH[i+len(marker):]
+	}
+	end := 0
+	for end < len(openSSH) && ((openSSH[end] >= '0' && openSSH[end] <= '9') || openSSH[end] == '.') {
+		end++
+	}
+	parts := strings.Split(openSSH[:end], ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	if parts[0] == "" || parts[1] == "" {
+		return ""
+	}
+	return parts[0] + "." + parts[1]
+}
+
 // osImage returns the architecture and kernel identity for a profile. Server
-// profiles run x86_64 Ubuntu; the legacy (IoT/router/SBC) profile runs the same
-// Ubuntu release on 64-bit ARM — the common embedded-device shape (a Raspberry-Pi-
-// class board) — so its CPU and kernel cohere as ARM rather than as a Xeon, while
-// dpkg/systemd/os-release stay genuine (Ubuntu arm64 is a real, attacked target).
-func osImage(profile string) (arch, kernelRel, kernelVer, pretty string) {
+// profiles run x86_64 Ubuntu; the legacy profile runs the same Ubuntu release on
+// 64-bit ARM, so its CPU and kernel cohere as ARM rather than as a Xeon.
+func osImage(profile string, rel osReleaseDef) (arch, kernelRel, kernelVer, pretty string) {
 	arch = "x86_64"
 	if profile == "legacy" {
 		arch = "aarch64"
 	}
-	return arch, "5.15.0-105-generic", "#115-Ubuntu SMP Mon Apr 15 09:52:04 UTC 2024", "Ubuntu 22.04.4 LTS"
+	return arch, rel.kernel, rel.kernelV, rel.pretty
+}
+
+func (p *Persona) OSVersionID() string { return osReleaseFor(p.OpenSSHVer).version }
+func (p *Persona) OSVersion() string   { return osReleaseFor(p.OpenSSHVer).label }
+func (p *Persona) OSCodename() string  { return osReleaseFor(p.OpenSSHVer).codename }
+func (p *Persona) GCCPackage() string  { return osReleaseFor(p.OpenSSHVer).gccPkg }
+func (p *Persona) GCCVersion() string  { return osReleaseFor(p.OpenSSHVer).gccVer }
+func (p *Persona) BinutilsVersion() string {
+	return osReleaseFor(p.OpenSSHVer).binutils
+}
+func (p *Persona) DigVersion() string    { return osReleaseFor(p.OpenSSHVer).dig }
+func (p *Persona) PythonVersion() string { return osReleaseFor(p.OpenSSHVer).python }
+func (p *Persona) PerlSubversion() string {
+	return osReleaseFor(p.OpenSSHVer).perl
+}
+func (p *Persona) RubyVersion() string { return osReleaseFor(p.OpenSSHVer).ruby }
+func (p *Persona) NodeVersion() string { return osReleaseFor(p.OpenSSHVer).node }
+func (p *Persona) PHPVersion() string  { return osReleaseFor(p.OpenSSHVer).php }
+func (p *Persona) ManDBVersion() string {
+	return osReleaseFor(p.OpenSSHVer).manDB
 }
 
 var (
@@ -148,22 +262,15 @@ var (
 	bkRoles      = []string{"backup", "bkp", "store", "nas", "vault", "archive"}
 	domains      = []string{"ec2.internal", "internal", "lan", "corp", "local", "intranet"}
 
-	opensshPool = []string{
-		"OpenSSH_8.9p1 Ubuntu-3ubuntu0.6",
-		"OpenSSH_8.9p1 Ubuntu-3ubuntu0.7",
-		"OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
-		"OpenSSH_8.9p1 Ubuntu-3ubuntu0.11",
-	}
+	opensshPool = openSSHVersions()
 	busyboxPool = []string{"1.30.1", "1.31.1", "1.34.1", "1.35.0", "1.36.1"}
 	wpPool      = []string{"6.2.5", "6.3.4", "6.4.3", "6.4.4", "6.5.2"}
 	tomcatPool  = []string{"9.0.71", "9.0.83", "9.0.88", "10.1.18"}
 	nginxPool   = []string{"1.18.0", "1.22.1", "1.24.0"}
 	apachePool  = []string{"2.4.52", "2.4.57", "2.4.58"}
 	phpPool     = []string{"7.4.33", "8.1.2", "8.1.27", "8.2.15"}
-	// Versions Ubuntu 22.04 (jammy) actually ships, so the FTP banner co-varies
-	// with the pinned distro instead of advertising a version no jammy package has
-	// (which a package-version database would flag against the OpenSSH/Apache
-	// Ubuntu banners).
+	// Versions stay in common Ubuntu package ranges so the FTP banner does not
+	// advertise a daemon vintage that is implausible for the Linux persona.
 	ftpVerPool = map[string][]string{
 		"vsftpd":    {"3.0.5"},
 		"proftpd":   {"1.3.7a"},
@@ -304,7 +411,8 @@ func GenerateProfile(name string) *Persona {
 	}
 	role := pick(prof.roles)
 	host := makeHostnameFromRole(prof.name, role)
-	arch, kernelRel, kernelVer, pretty := osImage(prof.name)
+	osRel := osReleasePool[mrand.IntN(len(osReleasePool))]
+	arch, kernelRel, kernelVer, pretty := osImage(prof.name, osRel)
 
 	octet2 := pickInt([]int{0, 0, 1, 10, 16, 20, 30})
 	var base string
@@ -328,7 +436,7 @@ func GenerateProfile(name string) *Persona {
 		KernelRel:    kernelRel,
 		KernelVer:    kernelVer,
 		Arch:         arch,
-		OpenSSHVer:   pick(opensshPool),
+		OpenSSHVer:   osRel.openSSH,
 		BusyBoxVer:   pick(busyboxPool),
 		WPVer:        pick(wpPool),
 		TomcatVer:    pick(tomcatPool),
