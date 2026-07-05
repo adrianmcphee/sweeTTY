@@ -44,6 +44,7 @@ func guardCases() []guardCase {
 		{"proto/http", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/adb", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/redis", []string{"os", "os/exec", "net/http", "syscall"}},
+		{"proto/docker", []string{"os", "os/exec", "net/http", "syscall"}},
 		// server and proxyproto read raw attacker bytes (the accept loop, the PROXY
 		// header); they need bare net but nothing that fetches, executes, or touches
 		// the host disk.

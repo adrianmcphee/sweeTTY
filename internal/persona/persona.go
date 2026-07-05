@@ -52,6 +52,7 @@ type Persona struct {
 	FTPSoftware string        `json:"ftp_software"`
 	FTPVer      string        `json:"ftp_version"`
 	RedisVer    string        `json:"redis_version"`
+	DockerVer   string        `json:"docker_version"`
 	Profile     string        `json:"profile"`
 	Services    []ServiceSpec `json:"services"`
 	HostIP      string        `json:"host_ip"`
@@ -275,6 +276,7 @@ var (
 	apachePool  = []string{"2.4.52", "2.4.57", "2.4.58"}
 	phpPool     = []string{"7.4.33", "8.1.2", "8.1.27", "8.2.15"}
 	redisPool   = []string{"5.0.7", "6.0.16", "6.2.14", "7.0.15"}
+	dockerPool  = []string{"20.10.24", "23.0.6", "24.0.9", "25.0.5"}
 	// Versions stay in common Ubuntu package ranges so the FTP banner does not
 	// advertise a daemon vintage that is implausible for the Linux persona.
 	ftpVerPool = map[string][]string{
@@ -315,7 +317,7 @@ var profiles = []profileDef{
 		return s
 	}},
 	{"infra", []string{"db", "cache", "data", "mq", "ns", "mail"}, func() []ServiceSpec {
-		s := []ServiceSpec{{"ssh", 22, ""}, {"redis", 6379, ""}}
+		s := []ServiceSpec{{"ssh", 22, ""}, {"docker", 2375, ""}, {"redis", 6379, ""}}
 		if chance(35) {
 			s = append(s, ServiceSpec{"http", 80, httpStyle()})
 		}
@@ -386,6 +388,7 @@ func fullServices() []ServiceSpec {
 		{"http", 80, "wordpress"},
 		{"https", 443, ""},
 		{"adb", 5555, ""},
+		{"docker", 2375, ""},
 		{"redis", 6379, ""},
 		{"telnet", 2323, "ubuntu"},
 		{"http", 8080, "tomcat"},
@@ -454,6 +457,7 @@ func GenerateProfile(name string) *Persona {
 		FTPSoftware:  ftpSw,
 		FTPVer:       pick(ftpVerPool[ftpSw]),
 		RedisVer:     pick(redisPool),
+		DockerVer:    pick(dockerPool),
 		Profile:      prof.name,
 		Services:     services,
 		HostIP:       fmt.Sprintf("%s.%d", base, 4+mrand.IntN(60)),

@@ -19,21 +19,21 @@ can yield. Each direction links to a build-ready spec in
 
 _Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
 
-SweeTTY already answers on more than the shell: telnet, SSH, HTTP, HTTPS, and FTP,
-each a real service on the port a real host of that kind answers on. The safety
-boundary that contains them is structural, not per-protocol (`internal/safety`),
-and a new service is a package implementing one interface (`server.Protocol`)
-wired in one place (`cmd/sweetty`). That is the cheap part of adding surface; the
-point is which surface.
+SweeTTY already answers on more than the shell: telnet, SSH, HTTP, HTTPS, FTP,
+ADB, Redis, and Docker, each a real service on the port a real host of that kind
+answers on. The safety boundary that contains them is structural, not
+per-protocol (`internal/safety`), and a new service is a package implementing one
+interface (`server.Protocol`) wired in one place (`cmd/sweetty`). That is the
+cheap part of adding surface; the point is which surface.
 
 The direction is the services a loader reaches for once the easy shells are
-exhausted, and that a shell-only sensor never sees: a Docker Engine API and the
-database and file-sharing ports that carry their own command-injection kill
-chains. Each one draws a chain that today lands on a closed port and reveals
-nothing, and each one lands inside the same boundary as the shell: intent
-captured, nothing fetched, nothing run, nothing written to the host. It is §2 and
-§3 applied to a wider door, and it costs the doctrine nothing, because the
-boundary already holds every handler by construction.
+exhausted, and that a shell-only sensor never sees: the database and file-sharing
+ports that carry their own command-injection kill chains. Each one draws a chain
+that today lands on a closed port and reveals nothing, and each one lands inside
+the same boundary as the shell: intent captured, nothing fetched, nothing run,
+nothing written to the host. It is §2 and §3 applied to a wider door, and it
+costs the doctrine nothing, because the boundary already holds every handler by
+construction.
 
 ### 2. Bait that bites back after they leave
 

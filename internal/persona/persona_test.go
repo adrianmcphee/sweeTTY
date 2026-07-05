@@ -8,7 +8,7 @@ import (
 )
 
 var validProtocols = map[string]bool{
-	"adb": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true, "redis": true,
+	"adb": true, "docker": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true, "redis": true,
 }
 
 func TestGenerateIsComplete(t *testing.T) {
@@ -18,6 +18,7 @@ func TestGenerateIsComplete(t *testing.T) {
 		"openssh": p.OpenSSHVer, "busybox": p.BusyBoxVer, "wp": p.WPVer,
 		"tomcat": p.TomcatVer, "nginx": p.NginxVer, "php": p.PHPVer,
 		"ftp_software": p.FTPSoftware, "ftp_version": p.FTPVer, "redis": p.RedisVer,
+		"docker":    p.DockerVer,
 		"root_hash": p.RootPwHash, "ssh_fp": p.SSHKeyFP, "machine_id": p.MachineID,
 		"fs_seed": p.FSSeed,
 	} {
@@ -69,7 +70,7 @@ func TestGenerateProfileFullHasEveryProtocol(t *testing.T) {
 	for _, s := range p.Services {
 		seen[s.Protocol] = true
 	}
-	for _, proto := range []string{"adb", "ftp", "ssh", "telnet", "http", "https", "redis"} {
+	for _, proto := range []string{"adb", "docker", "ftp", "ssh", "telnet", "http", "https", "redis"} {
 		if !seen[proto] {
 			t.Errorf("full profile missing %s", proto)
 		}
@@ -94,6 +95,16 @@ func TestInfraProfileExposesRedis(t *testing.T) {
 		}
 	}
 	t.Fatalf("infra profile should expose Redis on 6379, services: %+v", p.Services)
+}
+
+func TestInfraProfileExposesDocker(t *testing.T) {
+	p := GenerateProfile("infra")
+	for _, s := range p.Services {
+		if s.Protocol == "docker" && s.Port == 2375 {
+			return
+		}
+	}
+	t.Fatalf("infra profile should expose Docker on 2375, services: %+v", p.Services)
 }
 
 func TestGenerateProfileNamed(t *testing.T) {
@@ -223,6 +234,7 @@ func TestSoftwareVersionsVaryAndAreInPool(t *testing.T) {
 		{"ApacheVer", func(p *Persona) string { return p.ApacheVer }, apachePool},
 		{"PHPVer", func(p *Persona) string { return p.PHPVer }, phpPool},
 		{"RedisVer", func(p *Persona) string { return p.RedisVer }, redisPool},
+		{"DockerVer", func(p *Persona) string { return p.DockerVer }, dockerPool},
 	}
 	ps := make([]*Persona, N)
 	for i := range ps {

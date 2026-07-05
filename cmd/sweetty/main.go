@@ -21,6 +21,7 @@ import (
 	"sweetty/internal/persona"
 	"sweetty/internal/portal"
 	"sweetty/internal/proto/adb"
+	"sweetty/internal/proto/docker"
 	"sweetty/internal/proto/ftp"
 	httpproto "sweetty/internal/proto/http"
 	"sweetty/internal/proto/https"
@@ -233,6 +234,8 @@ func buildProtocol(lc config.Listener, p *persona.Persona, base *vfs.FS) server.
 		return adb.New(base, p)
 	case "redis":
 		return redis.New(p)
+	case "docker":
+		return docker.New(p)
 	}
 	return nil
 }
