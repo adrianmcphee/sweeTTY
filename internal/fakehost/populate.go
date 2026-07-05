@@ -368,6 +368,7 @@ func placeHomeClutter(f *vfs.FS, p *persona.Persona, r *rand.Rand, packages []po
 
 	rootMTime := stableMTime(p, r, 50, 130)
 	mkdirTreeOwned(f, "/root/.cache", 0o700, 0, 0, "root", "root", rootMTime)
+	f.MkdirOwned("/root/.cache", 0o700, 0, 0, "root", "root", rootMTime)
 	f.PlaceOwned("/root/.cache/motd.legal-displayed", []byte{}, 0o600, 0, 0, "root", "root", stableMTime(p, r, 54, 136))
 	existing := existingFile(f, "/root/.bash_history")
 	if len(existing) > 0 && existing[len(existing)-1] != '\n' {

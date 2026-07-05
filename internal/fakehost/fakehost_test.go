@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"path"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -184,8 +185,62 @@ func TestPopulationVariesPerInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Equal(statusA, statusB) && bytes.Equal(syslogA, syslogB) {
-		t.Fatal("different FSSeed values produced identical generated package and log content")
+	if bytes.Equal(statusA, statusB) {
+		t.Fatal("different FSSeed values produced identical package status")
+	}
+	if bytes.Equal(syslogA, syslogB) {
+		t.Fatal("different FSSeed values produced identical syslog content")
+	}
+}
+
+func TestGeneratedPackagesAgreeWithStatusAndDisk(t *testing.T) {
+	p := seededPersona("full", 0x5a)
+	fsys, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+
+	status := statusPackageNames(t, sess)
+	packages := packagePlan(p, seededRand(p))
+	if len(status) != len(packages) {
+		t.Fatalf("status lists %d packages, generator planned %d", len(status), len(packages))
+	}
+	for _, pkg := range packages {
+		if !status[pkg.Name] {
+			t.Errorf("generated package %s is missing from /var/lib/dpkg/status", pkg.Name)
+		}
+		for _, bin := range pkg.Binaries {
+			n, err := sess.Stat(bin.Path)
+			if err != nil {
+				t.Errorf("generated package %s binary %s is missing from disk: %v", pkg.Name, bin.Path, err)
+				continue
+			}
+			if n.Mode().Perm()&0o111 == 0 {
+				t.Errorf("%s from package %s is not executable: mode %v", bin.Path, pkg.Name, n.Mode().Perm())
+			}
+			body, err := sess.ReadFile(bin.Path)
+			if err != nil {
+				t.Errorf("read %s from package %s: %v", bin.Path, pkg.Name, err)
+				continue
+			}
+			if !bytes.HasPrefix(body, []byte("\x7fELF")) {
+				t.Errorf("%s from package %s is not an ELF stub: % x", bin.Path, pkg.Name, body[:min(4, len(body))])
+			}
+		}
+	}
+	for name := range status {
+		found := false
+		for _, pkg := range packages {
+			if pkg.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("/var/lib/dpkg/status lists unplanned package %s", name)
+		}
 	}
 }
 
@@ -216,7 +271,7 @@ func TestPopulatedMtimesFollowBootEpoch(t *testing.T) {
 	defer sess.Release()
 	boot := time.Unix(p.BootEpoch, 0)
 	now := time.Now().Add(time.Second)
-	for _, path := range populatedPaths(p) {
+	for _, path := range populationSnapshotPaths(t, fsys, p) {
 		n, err := sess.Stat(path)
 		if err != nil {
 			t.Fatalf("stat %s: %v", path, err)
@@ -225,6 +280,8 @@ func TestPopulatedMtimesFollowBootEpoch(t *testing.T) {
 			t.Errorf("%s mtime %s is outside boot window [%s, %s]", path, n.Mtime(), boot, now)
 		}
 	}
+	assertBefore(t, sess, "/var/log/syslog.1", "/var/log/syslog")
+	assertBefore(t, sess, "/var/log/auth.log.1", "/var/log/auth.log")
 }
 
 func TestHomeClutterOwnedByUser(t *testing.T) {
@@ -244,10 +301,36 @@ func TestHomeClutterOwnedByUser(t *testing.T) {
 		"/home/" + p.Username + "/.local/share/recently-used.xbel",
 		"/home/" + p.Username + "/.ssh/known_hosts",
 	} {
-		assertOwner(t, sess, path, p.UserUID, p.UserUID, p.Username, p.Username)
+		assertTreeOwner(t, sess, path, p.UserUID, p.UserUID, p.Username, p.Username)
 	}
 	for _, path := range []string{"/root/.bash_history", "/root/.cache", "/root/.cache/motd.legal-displayed"} {
-		assertOwner(t, sess, path, 0, 0, "root", "root")
+		assertTreeOwner(t, sess, path, 0, 0, "root", "root")
+	}
+}
+
+func TestGeneratedPopulationHasNoResidualPlaceholders(t *testing.T) {
+	p := seededPersona("full", 0x34)
+	fsys, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+	for _, path := range populationSnapshotPaths(t, fsys, p) {
+		n, err := sess.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if n.IsDir() {
+			continue
+		}
+		body, err := sess.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if bytes.Contains(body, []byte("{{")) {
+			t.Fatalf("%s still contains a template placeholder:\n%s", path, body)
+		}
 	}
 }
 
@@ -267,7 +350,7 @@ func snapshotPopulation(t *testing.T, fsys *vfs.FS, p *persona.Persona) map[stri
 	sess := fsys.NewSession("/")
 	defer sess.Release()
 	out := map[string]populationSnap{}
-	for _, path := range populatedPaths(p) {
+	for _, path := range populationSnapshotPaths(t, fsys, p) {
 		n, err := sess.Stat(path)
 		if err != nil {
 			t.Fatalf("stat %s: %v", path, err)
@@ -287,25 +370,149 @@ func snapshotPopulation(t *testing.T, fsys *vfs.FS, p *persona.Persona) map[stri
 	return out
 }
 
-func populatedPaths(p *persona.Persona) []string {
-	return []string{
-		"/var/lib/dpkg/status",
-		"/var/log/syslog",
-		"/var/log/syslog.1",
-		"/var/log/auth.log",
-		"/var/log/auth.log.1",
-		"/var/log/dpkg.log",
-		"/var/log/nginx/access.log",
-		"/home/" + p.Username + "/.bash_history",
-		"/home/" + p.Username + "/.cache/motd.legal-displayed",
-		"/home/" + p.Username + "/.local/share/recently-used.xbel",
-		"/home/" + p.Username + "/.ssh/known_hosts",
-		"/root/.bash_history",
-		"/root/.cache/motd.legal-displayed",
+func populationSnapshotPaths(t *testing.T, fsys *vfs.FS, p *persona.Persona) []string {
+	t.Helper()
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+	seen := map[string]bool{}
+	add := func(path string) { seen[path] = true }
+	for _, root := range []string{"/var/lib/dpkg", "/var/log"} {
+		collectTreeFiles(t, sess, root, seen)
+	}
+	for _, root := range []string{
+		"/home/" + p.Username + "/.cache",
+		"/home/" + p.Username + "/.local",
+		"/home/" + p.Username + "/.ssh",
+		"/home/" + p.Username + "/projects",
+		"/root/.cache",
+	} {
+		collectTreePaths(t, sess, root, seen)
+	}
+	add("/home/" + p.Username + "/.bash_history")
+	add("/root/.bash_history")
+
+	for _, pkg := range packagePlan(p, seededRand(p)) {
+		for _, bin := range pkg.Binaries {
+			add(bin.Path)
+		}
+		for _, generated := range packageConfigFiles(pkg, p) {
+			add(generated.path)
+		}
+	}
+
+	paths := make([]string, 0, len(seen))
+	for path := range seen {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func collectTreePaths(t *testing.T, sess *vfs.Session, root string, seen map[string]bool) {
+	t.Helper()
+	n, err := sess.Stat(root)
+	if err != nil {
+		return
+	}
+	seen[root] = true
+	if !n.IsDir() || n.IsLink() {
+		return
+	}
+	entries, err := sess.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", root, err)
+	}
+	for _, entry := range entries {
+		collectTreePaths(t, sess, path.Join(root, entry.Name()), seen)
 	}
 }
 
-func assertOwner(t *testing.T, sess *vfs.Session, path string, uid, gid int, uname, gname string) {
+func collectTreeFiles(t *testing.T, sess *vfs.Session, root string, seen map[string]bool) {
+	t.Helper()
+	n, err := sess.Stat(root)
+	if err != nil {
+		return
+	}
+	if !n.IsDir() || n.IsLink() {
+		seen[root] = true
+		return
+	}
+	entries, err := sess.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", root, err)
+	}
+	for _, entry := range entries {
+		collectTreeFiles(t, sess, path.Join(root, entry.Name()), seen)
+	}
+}
+
+func statusPackageNames(t *testing.T, sess *vfs.Session) map[string]bool {
+	t.Helper()
+	data, err := sess.ReadFile("/var/lib/dpkg/status")
+	if err != nil {
+		t.Fatalf("read /var/lib/dpkg/status: %v", err)
+	}
+	out := map[string]bool{}
+	var name string
+	installed := false
+	flush := func() {
+		if name != "" && installed {
+			out[name] = true
+		}
+		name = ""
+		installed = false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "Package":
+			name = strings.TrimSpace(value)
+		case "Status":
+			installed = strings.TrimSpace(value) == "install ok installed"
+		}
+	}
+	flush()
+	return out
+}
+
+func assertBefore(t *testing.T, sess *vfs.Session, older, newer string) {
+	t.Helper()
+	oldNode, err := sess.Stat(older)
+	if err != nil {
+		t.Fatalf("stat %s: %v", older, err)
+	}
+	newNode, err := sess.Stat(newer)
+	if err != nil {
+		t.Fatalf("stat %s: %v", newer, err)
+	}
+	if !oldNode.Mtime().Before(newNode.Mtime()) {
+		t.Fatalf("%s mtime %s should be before %s mtime %s", older, oldNode.Mtime(), newer, newNode.Mtime())
+	}
+}
+
+func assertTreeOwner(t *testing.T, sess *vfs.Session, root string, uid, gid int, uname, gname string) {
+	t.Helper()
+	n := assertOwner(t, sess, root, uid, gid, uname, gname)
+	if !n.IsDir() || n.IsLink() {
+		return
+	}
+	entries, err := sess.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", root, err)
+	}
+	for _, entry := range entries {
+		assertTreeOwner(t, sess, path.Join(root, entry.Name()), uid, gid, uname, gname)
+	}
+}
+
+func assertOwner(t *testing.T, sess *vfs.Session, path string, uid, gid int, uname, gname string) *vfs.Node {
 	t.Helper()
 	n, err := sess.Stat(path)
 	if err != nil {
@@ -314,6 +521,7 @@ func assertOwner(t *testing.T, sess *vfs.Session, path string, uid, gid int, una
 	if n.Uid() != uid || n.Gid() != gid || n.Uname() != uname || n.Gname() != gname {
 		t.Fatalf("%s owner = %d:%d %s:%s, want %d:%d %s:%s", path, n.Uid(), n.Gid(), n.Uname(), n.Gname(), uid, gid, uname, gname)
 	}
+	return n
 }
 
 func seededPersona(profile string, fill byte) *persona.Persona {
