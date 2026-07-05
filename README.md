@@ -247,7 +247,9 @@ Lock down the host so management ports are reachable only from you, and the hone
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow from YOUR_IP to any port 9999   # your real SSH (the portal is reached by tunnelling through it, so it needs no rule of its own)
-ufw allow 21,22,23,80,443,2323,8080/tcp   # honeypot surface
+jq -r '.listeners[].port' /opt/sweetty/config.json | while read -r port; do
+  ufw allow "${port}/tcp"                  # generated profile's honeypot surface
+done
 ufw enable
 ```
 
