@@ -1,0 +1,171 @@
+# SweeTTY Roadmap
+
+Directions that make the deception sharper, the capture wider, and the log more
+useful, without crossing the line [VISION.md](./VISION.md) draws: nothing is
+fetched from the network, nothing an attacker sends is executed, nothing touches
+the host disk, and everything still ships in one self-contained binary. Each
+direction below names the doctrine it serves and the capability it already stands
+on.
+
+[FEATURE-TREE.md](./FEATURE-TREE.md) records what is built and verified, each
+entry citing its test. The directions here are not in it yet; they are where the
+capability set is going and why. The order runs from the seams a skeptic finds
+first to the intelligence the log can yield, so the earliest directions harden
+what the product already claims and the later ones extend what it is worth.
+
+## Directions
+
+### 1. A version-coherent SSH cryptographic profile
+
+The SSH service completes a real handshake so it can capture a whole session, and
+the vision concedes the price openly: the key-exchange and cipher list belong to
+this Go SSH stack, not to the OpenSSH release the banner claims. The algorithm
+lists are already ordered toward a modern OpenSSH offer
+(`internal/proto/ssh/ssh.go`), which removes the crudest form of the tell, but the
+list is one fixed constant while the banner version is drawn per instance from the
+persona (`persona.OpenSSHVer`). Two seams remain. A persona that advertises one
+OpenSSH release while offering another release's exact algorithm set is a
+contradiction a single `ssh2-enum-algos` scan surfaces, and because the list is a
+constant in the public source, every instance presents the identical algorithm
+fingerprint, which is precisely the shared, source-derived signature §7 exists to
+remove.
+
+The direction is to derive the key-exchange, cipher, and MAC lists and their order
+from the OpenSSH version the persona advertises, from a small table of what each
+release actually offers, so the algorithm fingerprint matches the banner and
+varies across instances the way the banner already does. It builds on identity
+SweeTTY already generates: the persona picks the OpenSSH version
+(`internal/persona`), and the SSH server already sets the three lists in one place.
+The residual gap, the algorithms `x/crypto` does not implement, stays the
+documented, accepted price, and the pure banner-and-tarpit persona with no
+handshake and no fingerprint stays available where deflection matters more than a
+session. This is §1 coherence and §7 unpredictability applied to the one surface
+the vision names as its conceded seam.
+
+### 2. Per-instance filesystem population
+
+The virtual filesystem is coherent: one tree backs every file command, so a
+listing and a read can never disagree. What the tree is, though, is authored once
+and embedded (`internal/fakehost/fakeroot`), and the persona renders identity into
+it, so the values differ per instance. The shape does not. The set of files, the
+directories that exist, and the bodies that carry no identity are a constant a
+reader of the source knows in full, and a machine with a conspicuously thin
+`/etc`, a bare `/var/log`, and a home directory with nothing lived-in in it is a
+tell to the skeptical human §1 is written for, the one who stays a minute longer
+because the box is almost right.
+
+The direction is to generate the tree's population and its non-identity content per
+instance: a plausible installed-package footprint, log files with a believable
+history, home directories with the clutter a used account accumulates, timestamps
+that agree with the boot time the persona already fixes. The generation runs once,
+on first run, and persists beside the identity the same way `persona.json` already
+does (generate-on-first-run, never regenerated once written), then layers over the
+embedded skeleton the VFS already serves (`internal/vfs`, `internal/fakehost`). The
+box stays deterministic on the wire and self-contained in one binary, with no
+generator and no external call at runtime. It is §7 carried from identity values,
+which already vary, to the structure and content of the filesystem, which does not
+yet.
+
+### 3. An anti-detection gate that runs the skeptic's own probes
+
+The measure of the product is surviving the first minutes of skeptical probing by
+someone who has read the source. The suite already guards coherence from the
+inside: one persona tells one story across every service (`internal/crosscheck`), a
+file that is listed can be read, `/proc` is synthetic and per-arch, the VFS cannot
+be escaped. What it does not yet do is take the attacker's side and run the tools a
+fingerprinter reaches for.
+
+The direction is a gate that stands a live instance up in CI and runs the probes a
+skeptic runs: the algorithm enumeration that would catch a banner-versus-crypto
+mismatch, the JARM and HASSH expectations, and the coherence checks that catch a
+box that is almost right, failing the build on any tell it finds. It builds on the
+harness that already spins services up for tests (`internal/testharness`) and on
+the cross-service coherence checks (`internal/crosscheck`), turning internal
+invariants into an adversarial pass. It makes the vision's stated measure something
+the gate enforces rather than something the author hopes holds, and it is what the
+first two directions earn their place by passing.
+
+### 4. The services attackers try to own next
+
+SweeTTY already answers on more than the shell: telnet, SSH, HTTP, HTTPS, and FTP,
+each a real service on the port a real host of that kind answers on. The safety
+boundary that contains them is structural, not per-protocol (`internal/safety`),
+and a new service is a package implementing one interface (`server.Protocol`)
+wired in one place (`cmd/sweetty`). That is the cheap part of adding surface; the
+point is which surface.
+
+The direction is the services a loader reaches for once the easy shells are
+exhausted, and that a shell-only sensor never sees: the Android Debug Bridge on
+5555 that IoT botnets sweep for, an unauthenticated Redis, a Docker Engine API, and
+the database and file-sharing ports that carry their own command-injection kill
+chains. Each one draws a chain that today lands on a closed port and reveals
+nothing, and each one lands inside the same boundary as the shell: intent captured,
+nothing fetched, nothing run, nothing written to the host. It is §2 and §3 applied
+to a wider door, and it costs the doctrine nothing, because the boundary already
+holds every handler by construction.
+
+### 5. Bait that bites back after they leave
+
+The honeytoken is the sharpest signal SweeTTY plants: a legitimate user never runs
+the vault or digs the loot out of the per-instance loot path, so every touch is an
+attacker by construction, and however they try to open one they get the reveal
+instead of a secret (`internal/shell/reveal`, `internal/fakehost/decoys`, the
+`HONEYTOKEN` event). The signal ends, though, when the session does. What the
+attacker carries off the box, SweeTTY stops watching.
+
+The direction is bait that keeps signalling after exfiltration: a credentials file
+or an API token that is inert on the box and reveals nothing in place, but whose
+use elsewhere raises an alert in an audit trail the operator already watches, so a
+key lifted from the loot path and tried against the operator's own canary account
+reports who used it, from where, and when, long after the connection closed. The
+honeypot still reaches out to nothing; it plants, and the attacker's own later use
+is what fires. It extends §8 from the moment of the grab to the moment of the use,
+and it keeps the reveal culture the box already has, since the operator still gets
+the payoff, now with a second act.
+
+### 6. The log as campaign intelligence
+
+The portal already reads each source for what it is: it folds the log into
+incremental projections (`internal/portal`), segments a source's visits across an
+idle gap, and returns a conservative verdict, loader or brute-force or scanner or a
+tentative human, with the evidence behind it. It reads each source alone. The
+hundred sources running the same loader against the box in the same week are a
+hundred separate drill-downs, not one thing seen clearly.
+
+The direction is correlation across sources: cluster them by what they share, the
+same payload URL, the same reconstructed dropper (its sha256 is already captured),
+the same credential list, the same command sequence, into campaigns the portal
+names and counts, so the operator sees one botnet with four hundred addresses and
+one loader rather than four hundred rows. It builds on the analyzer and the payload
+rollup that already exist, the per-source assessment and the `DOWNLOAD_ATTEMPT` and
+`DROPPER` aggregation, and on the same incremental projection the dashboard already
+reads. It is §6, the loud dashboard, taken from what one source did to what one
+campaign is doing.
+
+### 7. Intelligence that travels
+
+Every event is already one self-describing JSON object with a stable session
+identity, sanitised so an attacker cannot forge a line (`internal/event`). It is
+honest and it is structured, which is most of what an intelligence feed needs; what
+it is not yet is portable, phrased in a vocabulary another system already parses.
+The highest-value captures, the command-and-control URLs an attacker pulls a second
+stage from, the dropper hashes, and the credentials, sit in a schema that is
+SweeTTY's own.
+
+The direction is to emit those captures in the shapes an intelligence pipeline
+already ingests, from the management plane and never from the sensor: a standard
+event schema for a SIEM, and indicator bundles for a threat-sharing exchange,
+generated by the portal that already enriches each source with geography and
+operator (`internal/geo`, `internal/portal`). The honeypot host still ships one
+thing off-box, its log, with no egress of its own; the translation into portable
+intelligence happens where the operator already stands, behind the tunnel. It is
+§4, honest structured logging, carried the last step to intelligence someone else
+can act on without first learning SweeTTY's private dialect.
+
+## The line these hold
+
+None of this moves the line. The measure in [VISION.md](./VISION.md) still holds
+for every direction here: the deception survives the skeptic, the whole chain lands
+in the log, the operator can replay and now correlate exactly what happened, and at
+no point did the box fetch a byte from the network, touch the host disk, or run a
+single thing an attacker asked it to.

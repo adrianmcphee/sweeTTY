@@ -284,6 +284,7 @@ A honeypot is an attractant. Run SweeTTY on a host you are prepared to lose, iso
 - [VISION.md](./VISION.md): why it exists and the design doctrine.
 - [ARCHITECTURE.md](./ARCHITECTURE.md): how the pieces fit and where the safety boundary sits.
 - [FEATURE-TREE.md](./FEATURE-TREE.md): the coverage index of what is built, each entry citing the test that verifies it.
+- [ROADMAP.md](./ROADMAP.md): where the capability set is going and why, each direction named against the doctrine it serves.
 - [TESTING.md](./TESTING.md): how the honeypot is judged and what the suite covers.
 - [AGENTS.md](./AGENTS.md): contributor rules and conventions.
 
