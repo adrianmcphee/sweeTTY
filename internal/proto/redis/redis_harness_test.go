@@ -134,6 +134,12 @@ func TestRedisURLPayloadLogsDownloadWithoutDialing(t *testing.T) {
 	if dl.URL != url {
 		t.Fatalf("download URL = %q, want %q", dl.URL, url)
 	}
+	if dl.Host != ln.Addr().String() {
+		t.Fatalf("download host = %q, want %q", dl.Host, ln.Addr().String())
+	}
+	if dl.Filename != "redis.sh" {
+		t.Fatalf("download filename = %q, want redis.sh", dl.Filename)
+	}
 	time.Sleep(200 * time.Millisecond)
 	if atomic.LoadInt32(&accepted) != 0 {
 		t.Fatal("Redis payload handling opened a real outbound connection")
@@ -141,20 +147,28 @@ func TestRedisURLPayloadLogsDownloadWithoutDialing(t *testing.T) {
 }
 
 func TestRedisMalformedRESPStaysInert(t *testing.T) {
-	h, _, _ := setupRedis(t)
-	defer h.Close()
+	for name, payload := range map[string]string{
+		"bad-array-length": "*not-a-count\r\n",
+		"bad-bulk-length":  "*1\r\n$not-a-count\r\n",
+		"bad-bulk-trailer": "*1\r\n$4\r\nxyzzzz",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, _, _ := setupRedis(t)
+			defer h.Close()
 
-	h.Send("*not-a-count\r\n")
-	_ = h.ReadFor(200 * time.Millisecond)
+			h.Send(payload)
+			_ = h.ReadFor(200 * time.Millisecond)
 
-	if _, ok := h.WaitEvent("REDIS_MALFORMED", 2*time.Second); !ok {
-		t.Fatal("malformed RESP was not logged")
-	}
-	if h.HasEvent("DROPPER") {
-		t.Fatal("malformed RESP reached dropper handling")
-	}
-	if h.HasEvent("DOWNLOAD_ATTEMPT") {
-		t.Fatal("malformed RESP reached download handling")
+			if _, ok := h.WaitEvent("REDIS_MALFORMED", 2*time.Second); !ok {
+				t.Fatal("malformed RESP was not logged")
+			}
+			if h.HasEvent("DROPPER") {
+				t.Fatal("malformed RESP reached dropper handling")
+			}
+			if h.HasEvent("DOWNLOAD_ATTEMPT") {
+				t.Fatal("malformed RESP reached download handling")
+			}
+		})
 	}
 }
 

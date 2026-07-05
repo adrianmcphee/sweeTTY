@@ -173,8 +173,8 @@ func handleSet(s *server.Session, st *redisState, args []string) {
 	}
 	st.lastKey = args[1]
 	st.lastValue = args[2]
-	if raw, host := firstURL(args[2]); raw != "" {
-		s.LogDownload("redis set "+args[1], raw, host, "")
+	if raw, host, filename := firstDownload(args[2]); raw != "" {
+		s.LogDownload("redis set "+args[1], raw, host, filename)
 	}
 	writeSimple(s, "OK")
 }
@@ -280,7 +280,7 @@ func commandLine(args []string) string {
 	return b.String()
 }
 
-func firstURL(s string) (string, string) {
+func firstDownload(s string) (string, string, string) {
 	for _, f := range strings.Fields(s) {
 		token := strings.Trim(f, `"'()<>[]{};,`)
 		if !strings.HasPrefix(token, "http://") && !strings.HasPrefix(token, "https://") {
@@ -290,7 +290,18 @@ func firstURL(s string) (string, string) {
 		if err != nil || u.Host == "" {
 			continue
 		}
-		return token, u.Hostname()
+		return token, u.Host, downloadName(u.Path)
 	}
-	return "", ""
+	return "", "", ""
+}
+
+func downloadName(path string) string {
+	path = strings.TrimRight(path, "/")
+	if path == "" {
+		return ""
+	}
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		return path[i+1:]
+	}
+	return path
 }
