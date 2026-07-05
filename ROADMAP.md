@@ -11,11 +11,15 @@ on.
 entry citing its test. The directions here are not in it yet; they are where the
 capability set is going and why. The order runs from the seams a skeptic finds
 first to the intelligence the log can yield, so the earliest directions harden
-what the product already claims and the later ones extend what it is worth.
+what the product already claims and the later ones extend what it is worth. Each
+direction links to a build-ready spec in [rfcs/](./rfcs/README.md), scoped to be
+picked up on its own.
 
 ## Directions
 
 ### 1. A version-coherent SSH cryptographic profile
+
+_Spec: [RFC 0001](./rfcs/0001-ssh-crypto-profile.md)._
 
 The SSH service completes a real handshake so it can capture a whole session, and
 the vision concedes the price openly: the key-exchange and cipher list belong to
@@ -44,6 +48,8 @@ the vision names as its conceded seam.
 
 ### 2. Per-instance filesystem population
 
+_Spec: [RFC 0002](./rfcs/0002-per-instance-filesystem-population.md)._
+
 The virtual filesystem is coherent: one tree backs every file command, so a
 listing and a read can never disagree. What the tree is, though, is authored once
 and embedded (`internal/fakehost/fakeroot`), and the persona renders identity into
@@ -68,6 +74,8 @@ yet.
 
 ### 3. An anti-detection gate that runs the skeptic's own probes
 
+_Spec: [RFC 0003](./rfcs/0003-anti-detection-gate.md)._
+
 The measure of the product is surviving the first minutes of skeptical probing by
 someone who has read the source. The suite already guards coherence from the
 inside: one persona tells one story across every service (`internal/crosscheck`), a
@@ -86,6 +94,8 @@ the gate enforces rather than something the author hopes holds, and it is what t
 first two directions earn their place by passing.
 
 ### 4. The services attackers try to own next
+
+_Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
 
 SweeTTY already answers on more than the shell: telnet, SSH, HTTP, HTTPS, and FTP,
 each a real service on the port a real host of that kind answers on. The safety
@@ -106,6 +116,8 @@ holds every handler by construction.
 
 ### 5. Bait that bites back after they leave
 
+_Spec: [RFC 0005](./rfcs/0005-bait-that-bites-back.md)._
+
 The honeytoken is the sharpest signal SweeTTY plants: a legitimate user never runs
 the vault or digs the loot out of the per-instance loot path, so every touch is an
 attacker by construction, and however they try to open one they get the reveal
@@ -125,6 +137,8 @@ the payoff, now with a second act.
 
 ### 6. The log as campaign intelligence
 
+_Spec: [RFC 0006](./rfcs/0006-campaign-correlation.md)._
+
 The portal already reads each source for what it is: it folds the log into
 incremental projections (`internal/portal`), segments a source's visits across an
 idle gap, and returns a conservative verdict, loader or brute-force or scanner or a
@@ -143,6 +157,8 @@ reads. It is §6, the loud dashboard, taken from what one source did to what one
 campaign is doing.
 
 ### 7. Intelligence that travels
+
+_Spec: [RFC 0007](./rfcs/0007-intelligence-export.md)._
 
 Every event is already one self-describing JSON object with a stable session
 identity, sanitised so an attacker cannot forge a line (`internal/event`). It is
