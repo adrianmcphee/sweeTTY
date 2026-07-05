@@ -287,6 +287,7 @@ A honeypot is an attractant. Run SweeTTY on a host you are prepared to lose, iso
 - [ROADMAP.md](./ROADMAP.md): where the capability set is going and why, each direction named against the doctrine it serves.
 - [TESTING.md](./TESTING.md): how the honeypot is judged and what the suite covers.
 - [AGENTS.md](./AGENTS.md): contributor rules and conventions.
+- [CONTRIBUTING.md](./CONTRIBUTING.md): how to fork, run the gate, and open a pull request.
 
 ## Project layout
 
