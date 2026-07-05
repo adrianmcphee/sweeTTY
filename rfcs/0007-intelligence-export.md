@@ -1,6 +1,6 @@
 # RFC 0007: Intelligence that travels
 
-Roadmap: [Direction 4](../ROADMAP.md#4-intelligence-that-travels).
+Roadmap: [Direction 3](../ROADMAP.md#3-intelligence-that-travels).
 Doctrine: VISION §4 (honest, structured, tamper-evident logging).
 
 ## Problem

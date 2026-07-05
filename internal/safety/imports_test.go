@@ -43,6 +43,7 @@ func guardCases() []guardCase {
 		{"proto/ftp", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/http", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/adb", []string{"os", "os/exec", "net/http", "syscall"}},
+		{"proto/mysql", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/redis", []string{"os", "os/exec", "net/http", "syscall"}},
 		{"proto/docker", []string{"os", "os/exec", "net/http", "syscall"}},
 		// server and proxyproto read raw attacker bytes (the accept loop, the PROXY

@@ -8,7 +8,7 @@ Every connection runs through the same accept loop and lands as structured event
 
 ```mermaid
 flowchart LR
-    ATK([Attacker]) -->|telnet, ssh, http,<br/>https, ftp| LIS["Listeners<br/>internal/proto/*"]
+    ATK([Attacker]) -->|telnet, ssh, http,<br/>https, ftp, adb,<br/>mysql, redis, docker| LIS["Listeners<br/>internal/proto/*"]
     LIS --> SES["Session<br/>internal/server"]
     SES --> SHELL["Fake shell<br/>internal/shell"]
     SHELL --> VFS["Virtual filesystem<br/>internal/vfs, fakehost"]

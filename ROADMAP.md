@@ -15,27 +15,7 @@ can yield. Each direction links to a build-ready spec in
 
 ## Directions
 
-### 1. The services attackers try to own next
-
-_Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
-
-SweeTTY already answers on more than the shell: telnet, SSH, HTTP, HTTPS, FTP,
-ADB, Redis, and Docker, each a real service on the port a real host of that kind
-answers on. The safety boundary that contains them is structural, not
-per-protocol (`internal/safety`), and a new service is a package implementing one
-interface (`server.Protocol`) wired in one place (`cmd/sweetty`). That is the
-cheap part of adding surface; the point is which surface.
-
-The direction is the services a loader reaches for once the easy shells are
-exhausted, and that a shell-only sensor never sees: the database and file-sharing
-ports that carry their own command-injection kill chains. Each one draws a chain
-that today lands on a closed port and reveals nothing, and each one lands inside
-the same boundary as the shell: intent captured, nothing fetched, nothing run,
-nothing written to the host. It is §2 and §3 applied to a wider door, and it
-costs the doctrine nothing, because the boundary already holds every handler by
-construction.
-
-### 2. Bait that bites back after they leave
+### 1. Bait that bites back after they leave
 
 _Spec: [RFC 0005](./rfcs/0005-bait-that-bites-back.md)._
 
@@ -56,7 +36,7 @@ is what fires. It extends §8 from the moment of the grab to the moment of the u
 and it keeps the reveal culture the box already has, since the operator still gets
 the payoff, now with a second act.
 
-### 3. The log as campaign intelligence
+### 2. The log as campaign intelligence
 
 _Spec: [RFC 0006](./rfcs/0006-campaign-correlation.md)._
 
@@ -77,7 +57,7 @@ rollup that already exist, the per-source assessment and the `DOWNLOAD_ATTEMPT` 
 reads. It is §6, the loud dashboard, taken from what one source did to what one
 campaign is doing.
 
-### 4. Intelligence that travels
+### 3. Intelligence that travels
 
 _Spec: [RFC 0007](./rfcs/0007-intelligence-export.md)._
 

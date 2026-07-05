@@ -8,7 +8,7 @@ import (
 )
 
 var validProtocols = map[string]bool{
-	"adb": true, "docker": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true, "redis": true,
+	"adb": true, "docker": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true, "mysql": true, "redis": true,
 }
 
 func TestGenerateIsComplete(t *testing.T) {
@@ -18,7 +18,7 @@ func TestGenerateIsComplete(t *testing.T) {
 		"openssh": p.OpenSSHVer, "busybox": p.BusyBoxVer, "wp": p.WPVer,
 		"tomcat": p.TomcatVer, "nginx": p.NginxVer, "php": p.PHPVer,
 		"ftp_software": p.FTPSoftware, "ftp_version": p.FTPVer, "redis": p.RedisVer,
-		"docker":    p.DockerVer,
+		"docker": p.DockerVer, "mysql": p.MySQLVer,
 		"root_hash": p.RootPwHash, "ssh_fp": p.SSHKeyFP, "machine_id": p.MachineID,
 		"fs_seed": p.FSSeed,
 	} {
@@ -70,7 +70,7 @@ func TestGenerateProfileFullHasEveryProtocol(t *testing.T) {
 	for _, s := range p.Services {
 		seen[s.Protocol] = true
 	}
-	for _, proto := range []string{"adb", "docker", "ftp", "ssh", "telnet", "http", "https", "redis"} {
+	for _, proto := range []string{"adb", "docker", "ftp", "ssh", "telnet", "http", "https", "mysql", "redis"} {
 		if !seen[proto] {
 			t.Errorf("full profile missing %s", proto)
 		}
@@ -105,6 +105,16 @@ func TestInfraProfileExposesDocker(t *testing.T) {
 		}
 	}
 	t.Fatalf("infra profile should expose Docker on 2375, services: %+v", p.Services)
+}
+
+func TestInfraProfileExposesMySQL(t *testing.T) {
+	p := GenerateProfile("infra")
+	for _, s := range p.Services {
+		if s.Protocol == "mysql" && s.Port == 3306 {
+			return
+		}
+	}
+	t.Fatalf("infra profile should expose MySQL on 3306, services: %+v", p.Services)
 }
 
 func TestGenerateProfileNamed(t *testing.T) {
@@ -233,6 +243,7 @@ func TestSoftwareVersionsVaryAndAreInPool(t *testing.T) {
 		{"NginxVer", func(p *Persona) string { return p.NginxVer }, nginxPool},
 		{"ApacheVer", func(p *Persona) string { return p.ApacheVer }, apachePool},
 		{"PHPVer", func(p *Persona) string { return p.PHPVer }, phpPool},
+		{"MySQLVer", func(p *Persona) string { return p.MySQLVer }, mysqlPool},
 		{"RedisVer", func(p *Persona) string { return p.RedisVer }, redisPool},
 		{"DockerVer", func(p *Persona) string { return p.DockerVer }, dockerPool},
 	}

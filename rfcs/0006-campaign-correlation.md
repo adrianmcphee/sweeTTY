@@ -1,6 +1,6 @@
 # RFC 0006: The log as campaign intelligence
 
-Roadmap: [Direction 3](../ROADMAP.md#3-the-log-as-campaign-intelligence).
+Roadmap: [Direction 2](../ROADMAP.md#2-the-log-as-campaign-intelligence).
 Doctrine: VISION §6 (a quiet binary and a loud dashboard).
 
 ## Problem

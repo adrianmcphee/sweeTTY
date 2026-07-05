@@ -15,7 +15,7 @@ SweeTTY is built from scratch in Go and kept deliberately dependency-light. The 
 
 ## What it does
 
-- **Listens on many ports**, each running an independent fake service (telnet, SSH, HTTP, HTTPS, FTP).
+- **Listens on many ports**, each running an independent fake service (telnet, SSH, HTTP, HTTPS, FTP, ADB, MySQL, Redis, Docker).
 - **Presents a real interactive shell** over SSH and telnet, backed by a coherent **virtual filesystem**: `cd` changes directory, the prompt follows, and `ls`, `cat`, `find`, `stat`, `head`, and `tail` all read from one consistent tree. You cannot trip it up by reading a file you just listed.
 - **Lets attackers believe they're winning, inside a sealed boundary.** Downloads complete and the file lands, package installs finish, cron jobs and dropped SSH keys persist, and `scp`/`rsync` report a successful exfil, yet nothing is fetched from the network, nothing they send runs, and nothing touches the host disk. Compiles still grind and fail, and tarpit ports hold scanner threads open doing nothing.
 - **Captures credentials, commands, payloads, and download URLs** across every protocol.
