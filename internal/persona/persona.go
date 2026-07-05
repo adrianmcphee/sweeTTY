@@ -79,16 +79,20 @@ type Persona struct {
 	// host key. It is persisted so the host key is stable across restarts; a
 	// regenerated host key would trip every reconnecting client's known-hosts
 	// warning. It never appears in the source.
-	SSHHostKeySeed string   `json:"ssh_host_key_seed"`
-	SSHKeyFP       string   `json:"ssh_host_key_fp"`
-	KnownKey       string   `json:"known_host_key"`
-	RootAuthKey    string   `json:"root_auth_key"`
-	RootPrivKey    string   `json:"root_priv_key"`
-	WPDBName       string   `json:"wp_db_name"`
-	WPDBUser       string   `json:"wp_db_user"`
-	WPDBPass       string   `json:"wp_db_pass"`
-	WPSalts        []string `json:"wp_salts"`
-	BootEpoch      int64    `json:"boot_epoch"`
+	SSHHostKeySeed string `json:"ssh_host_key_seed"`
+	// FSSeed is the 32-byte ChaCha8 seed (base64) for this instance's generated
+	// filesystem population. It is persisted so packages, logs, and home clutter
+	// stay stable across restarts while varying between deployed instances.
+	FSSeed      string   `json:"fs_seed"`
+	SSHKeyFP    string   `json:"ssh_host_key_fp"`
+	KnownKey    string   `json:"known_host_key"`
+	RootAuthKey string   `json:"root_auth_key"`
+	RootPrivKey string   `json:"root_priv_key"`
+	WPDBName    string   `json:"wp_db_name"`
+	WPDBUser    string   `json:"wp_db_user"`
+	WPDBPass    string   `json:"wp_db_pass"`
+	WPSalts     []string `json:"wp_salts"`
+	BootEpoch   int64    `json:"boot_epoch"`
 	// LootPath is this instance's treasure directory on the backup/NAS host: an
 	// obscure, alluring, per-instance-random path the breadcrumb trail leads to. It
 	// is randomized so no two deployments share a location a scanner could
@@ -475,6 +479,7 @@ func GenerateProfile(name string) *Persona {
 	p.RootAuthKey = fmt.Sprintf("ssh-ed25519 %s %s@%s", p.KnownKey, p.Username, p.Hostname)
 	p.RootPrivKey = fakePrivKey()
 	p.SSHHostKeySeed = base64.RawStdEncoding.EncodeToString(randBytes(ed25519.SeedSize))
+	p.FSSeed = base64.RawStdEncoding.EncodeToString(randBytes(32))
 	return p
 }
 

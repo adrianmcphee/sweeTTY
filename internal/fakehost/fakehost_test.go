@@ -2,10 +2,13 @@ package fakehost
 
 import (
 	"bytes"
+	"encoding/base64"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"sweetty/internal/persona"
 	"sweetty/internal/vfs"
@@ -28,6 +31,11 @@ var templatedFiles = []string{
 	"/var/www/html/wp-config.php",
 	"/home/deploy/scripts/backup.sh",
 	"/var/log/auth.log",
+	"/var/lib/dpkg/status",
+	"/var/log/syslog",
+	"/var/log/dpkg.log",
+	"/home/deploy/.bash_history",
+	"/home/deploy/.local/share/recently-used.xbel",
 }
 
 func TestLoadRendersInstanceIdentity(t *testing.T) {
@@ -140,6 +148,186 @@ func TestTwoInstancesDiffer(t *testing.T) {
 	if a.Hostname == b.Hostname && a.HostIP == b.HostIP && a.RootPwHash == b.RootPwHash {
 		t.Fatal("two generated personas are identical; identity is not randomized")
 	}
+}
+
+func TestPopulationVariesPerInstance(t *testing.T) {
+	a := seededPersona("web", 0x11)
+	b := *a
+	b.FSSeed = encodedSeed(0x99)
+
+	fsa, err := Load(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsb, err := Load(&b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sa := fsa.NewSession("/")
+	defer sa.Release()
+	sb := fsb.NewSession("/")
+	defer sb.Release()
+
+	statusA, err := sa.ReadFile("/var/lib/dpkg/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusB, err := sb.ReadFile("/var/lib/dpkg/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	syslogA, err := sa.ReadFile("/var/log/syslog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	syslogB, err := sb.ReadFile("/var/log/syslog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(statusA, statusB) && bytes.Equal(syslogA, syslogB) {
+		t.Fatal("different FSSeed values produced identical generated package and log content")
+	}
+}
+
+func TestPopulationIsStableWithinInstance(t *testing.T) {
+	p := seededPersona("infra", 0x42)
+	a, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sa := snapshotPopulation(t, a, p)
+	sb := snapshotPopulation(t, b, p)
+	if !reflect.DeepEqual(sa, sb) {
+		t.Fatalf("population changed between loads:\nfirst=%#v\nsecond=%#v", sa, sb)
+	}
+}
+
+func TestPopulatedMtimesFollowBootEpoch(t *testing.T) {
+	p := seededPersona("ftp", 0x25)
+	fsys, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+	boot := time.Unix(p.BootEpoch, 0)
+	now := time.Now().Add(time.Second)
+	for _, path := range populatedPaths(p) {
+		n, err := sess.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if n.Mtime().Before(boot) || n.Mtime().After(now) {
+			t.Errorf("%s mtime %s is outside boot window [%s, %s]", path, n.Mtime(), boot, now)
+		}
+	}
+}
+
+func TestHomeClutterOwnedByUser(t *testing.T) {
+	p := seededPersona("web", 0x73)
+	fsys, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+
+	for _, path := range []string{
+		"/home/" + p.Username + "/.bash_history",
+		"/home/" + p.Username + "/.cache",
+		"/home/" + p.Username + "/.cache/pip",
+		"/home/" + p.Username + "/.local",
+		"/home/" + p.Username + "/.local/share/recently-used.xbel",
+		"/home/" + p.Username + "/.ssh/known_hosts",
+	} {
+		assertOwner(t, sess, path, p.UserUID, p.UserUID, p.Username, p.Username)
+	}
+	for _, path := range []string{"/root/.bash_history", "/root/.cache", "/root/.cache/motd.legal-displayed"} {
+		assertOwner(t, sess, path, 0, 0, "root", "root")
+	}
+}
+
+type populationSnap struct {
+	body  string
+	mode  uint32
+	uid   int
+	gid   int
+	uname string
+	gname string
+	mtime int64
+	size  int64
+}
+
+func snapshotPopulation(t *testing.T, fsys *vfs.FS, p *persona.Persona) map[string]populationSnap {
+	t.Helper()
+	sess := fsys.NewSession("/")
+	defer sess.Release()
+	out := map[string]populationSnap{}
+	for _, path := range populatedPaths(p) {
+		n, err := sess.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		var body []byte
+		if !n.IsDir() {
+			body, err = sess.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+		}
+		out[path] = populationSnap{
+			body: string(body), mode: uint32(n.Mode()), uid: n.Uid(), gid: n.Gid(),
+			uname: n.Uname(), gname: n.Gname(), mtime: n.Mtime().UnixNano(), size: n.Size(),
+		}
+	}
+	return out
+}
+
+func populatedPaths(p *persona.Persona) []string {
+	return []string{
+		"/var/lib/dpkg/status",
+		"/var/log/syslog",
+		"/var/log/syslog.1",
+		"/var/log/auth.log",
+		"/var/log/auth.log.1",
+		"/var/log/dpkg.log",
+		"/var/log/nginx/access.log",
+		"/home/" + p.Username + "/.bash_history",
+		"/home/" + p.Username + "/.cache/motd.legal-displayed",
+		"/home/" + p.Username + "/.local/share/recently-used.xbel",
+		"/home/" + p.Username + "/.ssh/known_hosts",
+		"/root/.bash_history",
+		"/root/.cache/motd.legal-displayed",
+	}
+}
+
+func assertOwner(t *testing.T, sess *vfs.Session, path string, uid, gid int, uname, gname string) {
+	t.Helper()
+	n, err := sess.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if n.Uid() != uid || n.Gid() != gid || n.Uname() != uname || n.Gname() != gname {
+		t.Fatalf("%s owner = %d:%d %s:%s, want %d:%d %s:%s", path, n.Uid(), n.Gid(), n.Uname(), n.Gname(), uid, gid, uname, gname)
+	}
+}
+
+func seededPersona(profile string, fill byte) *persona.Persona {
+	p := persona.GenerateProfile(profile)
+	p.FSSeed = encodedSeed(fill)
+	return p
+}
+
+func encodedSeed(fill byte) string {
+	seed := make([]byte, 32)
+	for i := range seed {
+		seed[i] = fill + byte(i)
+	}
+	return base64.RawStdEncoding.EncodeToString(seed)
 }
 
 // TestOwnershipMatchesPasswdAndGroup walks every node in the rendered filesystem

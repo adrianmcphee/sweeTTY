@@ -3,6 +3,7 @@ package shell
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -843,15 +844,99 @@ func mainPID(p *persona.Persona, name string) (int, bool) {
 func (sh *Shell) cmdDpkg(args []string) string {
 	for _, a := range args[1:] {
 		if a == "-l" || a == "--list" {
-			out := "Desired=Unknown/Install/Remove/Purge/Hold\n| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n||/ Name           Version          Architecture Description\n+++-==============-================-============-=================================\nii  bash           5.1-6ubuntu1     amd64        GNU Bourne Again SHell\nii  coreutils      8.32-4.1ubuntu1  amd64        GNU core utilities\nii  curl           7.81.0-1ubuntu1  amd64        command line tool for transferring data\nii  nginx          1.18.0-6ubuntu14 amd64        small, powerful, scalable web server\nii  openssh-server 1:8.9p1-3ubuntu0 amd64        secure shell (SSH) server\n"
-			if sh.p.Embedded() {
-				// Ubuntu on arm64: every package is built for the board's arch.
-				out = strings.ReplaceAll(out, "amd64", "arm64")
+			if out := sh.dpkgListFromStatus(); out != "" {
+				return out
 			}
-			return out
+			return sh.defaultDpkgList()
 		}
 	}
 	return ""
+}
+
+type dpkgPackage struct {
+	name        string
+	version     string
+	arch        string
+	description string
+	installed   bool
+}
+
+func (sh *Shell) dpkgListFromStatus() string {
+	data, err := sh.readFile("/var/lib/dpkg/status")
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	pkgs := parseDpkgStatus(string(data))
+	if len(pkgs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(dpkgHeader())
+	for _, pkg := range pkgs {
+		fmt.Fprintf(&b, "ii  %-22s %-24s %-12s %s\n", pkg.name, pkg.version, pkg.arch, pkg.description)
+	}
+	return b.String()
+}
+
+func parseDpkgStatus(data string) []dpkgPackage {
+	var out []dpkgPackage
+	var cur dpkgPackage
+	flush := func() {
+		if cur.name != "" && cur.version != "" && cur.arch != "" && cur.installed {
+			out = append(out, cur)
+		}
+		cur = dpkgPackage{}
+	}
+	for _, line := range strings.Split(data, "\n") {
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, " ") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		switch key {
+		case "Package":
+			cur.name = value
+		case "Version":
+			cur.version = value
+		case "Architecture":
+			cur.arch = value
+		case "Description":
+			cur.description = value
+		case "Status":
+			cur.installed = value == "install ok installed"
+		}
+	}
+	flush()
+	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	return out
+}
+
+func (sh *Shell) defaultDpkgList() string {
+	out := dpkgHeader() +
+		"ii  bash                   5.1-6ubuntu1             amd64        GNU Bourne Again SHell\n" +
+		"ii  coreutils              8.32-4.1ubuntu1          amd64        GNU core utilities\n" +
+		"ii  curl                   7.81.0-1ubuntu1          amd64        command line tool for transferring data\n" +
+		"ii  nginx                  1.18.0-6ubuntu14         amd64        small, powerful, scalable web server\n" +
+		"ii  openssh-server         1:8.9p1-3ubuntu0         amd64        secure shell server\n"
+	if sh.p.Embedded() {
+		return strings.ReplaceAll(out, "amd64", "arm64")
+	}
+	return out
+}
+
+func dpkgHeader() string {
+	return "Desired=Unknown/Install/Remove/Purge/Hold\n" +
+		"| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n" +
+		"|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n" +
+		"||/ Name                   Version                  Architecture Description\n" +
+		"+++-======================-========================-============-=================================\n"
 }
 
 func (sh *Shell) cmdIP(args []string) string {

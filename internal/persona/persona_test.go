@@ -1,6 +1,7 @@
 package persona
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ func TestGenerateIsComplete(t *testing.T) {
 		"tomcat": p.TomcatVer, "nginx": p.NginxVer, "php": p.PHPVer,
 		"ftp_software": p.FTPSoftware, "ftp_version": p.FTPVer,
 		"root_hash": p.RootPwHash, "ssh_fp": p.SSHKeyFP, "machine_id": p.MachineID,
+		"fs_seed": p.FSSeed,
 	} {
 		if v == "" {
 			t.Errorf("persona field %q is empty", name)
@@ -36,6 +38,25 @@ func TestGenerateIsComplete(t *testing.T) {
 	}
 	if !strings.Contains(p.Uname(), p.Hostname) || !strings.Contains(p.Uname(), p.Arch) {
 		t.Errorf("uname incoherent: %q", p.Uname())
+	}
+}
+
+func TestFSSeedIsPopulatedAndVaries(t *testing.T) {
+	const n = 16
+	seen := map[string]bool{}
+	for range n {
+		p := Generate()
+		seed, err := base64.RawStdEncoding.DecodeString(p.FSSeed)
+		if err != nil {
+			t.Fatalf("FSSeed is not raw base64: %v", err)
+		}
+		if len(seed) != 32 {
+			t.Fatalf("FSSeed decodes to %d bytes, want 32", len(seed))
+		}
+		seen[p.FSSeed] = true
+	}
+	if len(seen) != n {
+		t.Fatalf("FSSeed repeated across %d generations: saw %d distinct values", n, len(seen))
 	}
 }
 
@@ -136,6 +157,7 @@ func TestEveryIdentityFieldVaries(t *testing.T) {
 		"BootID":      func(p *Persona) string { return p.BootID },
 		"RootUUID":    func(p *Persona) string { return p.RootUUID },
 		"BootUUID":    func(p *Persona) string { return p.BootUUID },
+		"FSSeed":      func(p *Persona) string { return p.FSSeed },
 		"RootPwHash":  func(p *Persona) string { return p.RootPwHash },
 		"UserPwHash":  func(p *Persona) string { return p.UserPwHash },
 	}

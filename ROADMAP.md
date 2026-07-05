@@ -17,33 +17,7 @@ picked up on its own.
 
 ## Directions
 
-### 1. Per-instance filesystem population
-
-_Spec: [RFC 0002](./rfcs/0002-per-instance-filesystem-population.md)._
-
-The virtual filesystem is coherent: one tree backs every file command, so a
-listing and a read can never disagree. What the tree is, though, is authored once
-and embedded (`internal/fakehost/fakeroot`), and the persona renders identity into
-it, so the values differ per instance. The shape does not. The set of files, the
-directories that exist, and the bodies that carry no identity are a constant a
-reader of the source knows in full, and a machine with a conspicuously thin
-`/etc`, a bare `/var/log`, and a home directory with nothing lived-in in it is a
-tell to the skeptical human §1 is written for, the one who stays a minute longer
-because the box is almost right.
-
-The direction is to generate the tree's population and its non-identity content per
-instance: a plausible installed-package footprint, log files with a believable
-history, home directories with the clutter a used account accumulates, timestamps
-that agree with the boot time the persona already fixes. The generation runs once,
-on first run, and persists beside the identity the same way `persona.json` already
-does (generate-on-first-run, never regenerated once written), then layers over the
-embedded skeleton the VFS already serves (`internal/vfs`, `internal/fakehost`). The
-box stays deterministic on the wire and self-contained in one binary, with no
-generator and no external call at runtime. It is §7 carried from identity values,
-which already vary, to the structure and content of the filesystem, which does not
-yet.
-
-### 2. An anti-detection gate that runs the skeptic's own probes
+### 1. An anti-detection gate that runs the skeptic's own probes
 
 _Spec: [RFC 0003](./rfcs/0003-anti-detection-gate.md)._
 
@@ -64,7 +38,7 @@ invariants into an adversarial pass. It makes the vision's stated measure someth
 the gate enforces rather than something the author hopes holds, and it is what the
 early hardening directions earn their place by passing.
 
-### 3. The services attackers try to own next
+### 2. The services attackers try to own next
 
 _Spec: [RFC 0004](./rfcs/0004-additional-services.md)._
 
@@ -85,7 +59,7 @@ nothing fetched, nothing run, nothing written to the host. It is §2 and §3 app
 to a wider door, and it costs the doctrine nothing, because the boundary already
 holds every handler by construction.
 
-### 4. Bait that bites back after they leave
+### 3. Bait that bites back after they leave
 
 _Spec: [RFC 0005](./rfcs/0005-bait-that-bites-back.md)._
 
@@ -106,7 +80,7 @@ is what fires. It extends §8 from the moment of the grab to the moment of the u
 and it keeps the reveal culture the box already has, since the operator still gets
 the payoff, now with a second act.
 
-### 5. The log as campaign intelligence
+### 4. The log as campaign intelligence
 
 _Spec: [RFC 0006](./rfcs/0006-campaign-correlation.md)._
 
@@ -127,7 +101,7 @@ rollup that already exist, the per-source assessment and the `DOWNLOAD_ATTEMPT` 
 reads. It is §6, the loud dashboard, taken from what one source did to what one
 campaign is doing.
 
-### 6. Intelligence that travels
+### 5. Intelligence that travels
 
 _Spec: [RFC 0007](./rfcs/0007-intelligence-export.md)._
 

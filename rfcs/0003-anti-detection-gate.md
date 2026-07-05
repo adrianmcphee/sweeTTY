@@ -1,6 +1,6 @@
 # RFC 0003: An anti-detection gate that runs the skeptic's own probes
 
-Roadmap: [Direction 2](../ROADMAP.md#2-an-anti-detection-gate-that-runs-the-skeptics-own-probes).
+Roadmap: [Direction 1](../ROADMAP.md#1-an-anti-detection-gate-that-runs-the-skeptics-own-probes).
 Doctrine: VISION's measure of the product (survive the first minutes of skeptical
 probing by someone who has read the source).
 

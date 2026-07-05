@@ -22,6 +22,7 @@ file. Design rationale lives in the companion docs ([VISION.md](./VISION.md),
 - **Every identity field is populated on first run**: hostname, domain, internal range, neighbours, kernel, software versions, secrets, boot time. _internal/persona: TestGenerateIsComplete_
 - **Hostnames are believable and varied per instance**: drawn from several real naming schools (role/env, region-coded, cloud ip-in-name, themed codename, scale-set node) over a wide vocabulary, with appliances (the IoT/legacy profile) getting device-style names instead of server names, so there is no shared shape to fingerprint as the sweetty default. _internal/persona: TestServerHostnamesAreVariedAndNonEmpty, TestApplianceHostnamesLookLikeDevices, TestProfileRoutesHostnameStyle, TestHostnameBaseSkipsShortStubs_
 - **Every identifying field varies between instances**; profiles and software versions are drawn from pools and vary across runs, and the OpenSSH package version carries a matching Ubuntu release, kernel, and toolchain story. _internal/persona: TestTwoPersonasDiffer, TestEveryIdentityFieldVaries, TestProfileVarietyAcrossRuns, TestSoftwareVersionsVaryAndAreInPool, TestOpenSSHVersionCarriesMatchingUbuntuRelease_
+- **The filesystem population seed is persisted with the persona** and varies between generated instances. _internal/persona: TestFSSeedIsPopulatedAndVaries_
 - **Profiles select a service set**: web, edge, infra, legacy, ftp; `full` exposes every protocol; an unknown name falls back to random. _internal/persona: TestGenerateProfileFullHasEveryProtocol, TestGenerateProfileNamed, TestUnknownProfileFallsBackToRandom_
 - **The legacy profile is aarch64 end to end**; server profiles are x86_64; only arch differs by profile. _internal/persona: TestLegacyProfileIsEmbeddedARM, TestServerProfilesStayX86, TestOSImageOnlyArchDiffersByProfile_
 - **Only the per-instance password authenticates**; passwords differ between instances. _internal/persona: TestAcceptOnlyPerInstancePasswords, TestPasswordsVaryPerInstance_
@@ -35,6 +36,7 @@ file. Design rationale lives in the companion docs ([VISION.md](./VISION.md),
 - **Stub binaries report as ELF** to `file`. _internal/vfs: TestStubBinaryELF_
 - **The per-session overlay is copy-on-write**; writes and deletions are session-local; cwd tracks. _internal/vfs: TestCopyOnWriteOverlay, TestCwdAndChdir_
 - **The embedded tree renders the instance identity**: no residual placeholders, two instances differ, ownership matches `/etc/passwd` and `/etc/group`, modes consistent, and release files render the persona's OS, kernel, and toolchain identity on both the main host and NAS pivot. _internal/fakehost: TestLoadRendersInstanceIdentity, TestNoResidualPlaceholders, TestTwoInstancesDiffer, TestOwnershipMatchesPasswdAndGroup, TestCoherentOwnershipAndModes, TestReleaseFilesRenderPersonaRelease, TestNASReleaseFileRendersPersonaRelease_
+- **The embedded tree is populated per instance** from the persisted filesystem seed: package footprint and log content vary between instances, remain stable within one instance, carry mtimes inside the persona boot window, and home clutter is owned by the account named in `/etc/passwd`. _internal/fakehost: TestPopulationVariesPerInstance, TestPopulationIsStableWithinInstance, TestPopulatedMtimesFollowBootEpoch, TestHomeClutterOwnedByUser_
 - **`/proc` identity is synthetic and per-arch**, not the host's. _internal/fakehost: TestProcIdentityRendersPerArch_
 
 ## Shell coherence
@@ -50,6 +52,7 @@ file. Design rationale lives in the companion docs ([VISION.md](./VISION.md),
 - **head and tail honour line and byte counts**. _internal/shell: TestHeadTailHonorLineCount_
 - **ls reports real hard-link counts, dot entries, and the total line**. _internal/shell: TestLsLinkCounts, TestLsDotEntriesAndTotal_
 - **Generated output derives from session state**: disk story, process start versus uptime, systemctl main PID versus ps, listeners versus persona services. _internal/shell: TestDiskStoryIsCoherent, TestProcessStartCoherentWithUptime, TestSystemctlMainPidMatchesPs, TestListenersMatchPersonaServices_
+- **Installed packages agree across attacker-visible views**: `dpkg -l` reads the VFS package database and every listed package command resolves through `which` to a VFS path. _internal/shell: TestInstalledPackagesAgreeWithDpkgAndWhich_
 - **Arch is consistent across /proc, uname, lscpu, and the disk**, including the ARM board. _internal/shell: TestArchIsOneStoryAcrossSources, TestEmbeddedDiskStoryIsCoherent; internal/proto/telnet: TestEmbeddedDeviceSessionIsCoherentlyARM_
 - **Disk geometry varies between instances and is stable within one**. _internal/shell: TestDiskGeometryVariesPerInstance, TestDiskGeometryIsStableWithinInstance_
 

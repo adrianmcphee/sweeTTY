@@ -238,6 +238,11 @@ func (ld *loader) addFile(abs string, content []byte) {
 // fixed at build time. Ancestors that must be created are given conventional
 // directory perms inherited from the root.
 func (f *FS) Mkdir(abs string, mode fs.FileMode, uname, gname string, mtime time.Time) *Node {
+	return f.MkdirOwned(abs, mode, 0, 0, uname, gname, mtime)
+}
+
+// MkdirOwned creates dir with explicit numeric and symbolic ownership.
+func (f *FS) MkdirOwned(abs string, mode fs.FileMode, uid, gid int, uname, gname string, mtime time.Time) *Node {
 	abs = cleanAbs(abs)
 	if abs == "/" {
 		return f.root
@@ -250,6 +255,7 @@ func (f *FS) Mkdir(abs string, mode fs.FileMode, uname, gname string, mtime time
 		parent.children[name] = n
 	}
 	n.mode = fs.ModeDir | mode
+	n.uid, n.gid = uid, gid
 	n.uname, n.gname, n.mtime = uname, gname, mtime
 	return n
 }
@@ -289,6 +295,11 @@ func binHash(name string) uint32 {
 // content, mode, ownership, and mtime, overwriting any existing node. It is the
 // file counterpart to Mkdir for grafting per-instance content.
 func (f *FS) Place(abs string, content []byte, mode fs.FileMode, uname, gname string, mtime time.Time) {
+	f.PlaceOwned(abs, content, mode, 0, 0, uname, gname, mtime)
+}
+
+// PlaceOwned writes a file at abs with explicit numeric and symbolic ownership.
+func (f *FS) PlaceOwned(abs string, content []byte, mode fs.FileMode, uid, gid int, uname, gname string, mtime time.Time) {
 	abs = cleanAbs(abs)
 	if abs == "/" {
 		return
@@ -296,8 +307,26 @@ func (f *FS) Place(abs string, content []byte, mode fs.FileMode, uname, gname st
 	parent := f.mkdirAll(parentDir(abs))
 	name := baseName(abs)
 	parent.children[name] = &Node{
-		name: name, mode: mode, uname: uname, gname: gname,
+		name: name, mode: mode, uid: uid, gid: gid, uname: uname, gname: gname,
 		mtime: mtime, content: content,
+	}
+}
+
+// PlaceStub writes a synthetic binary at abs using the same ELF stub backing as
+// manifest binaries, while reporting the requested size in ls and stat output.
+func (f *FS) PlaceStub(abs string, size int64, mode fs.FileMode, uid, gid int, uname, gname string, mtime time.Time) {
+	abs = cleanAbs(abs)
+	if abs == "/" {
+		return
+	}
+	if size <= 0 {
+		size = int64(14000 + binHash(abs)%1250000)
+	}
+	parent := f.mkdirAll(parentDir(abs))
+	name := baseName(abs)
+	parent.children[name] = &Node{
+		name: name, mode: mode, uid: uid, gid: gid, uname: uname, gname: gname,
+		mtime: mtime, stub: true, size: size,
 	}
 }
 

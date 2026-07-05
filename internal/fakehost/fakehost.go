@@ -21,7 +21,12 @@ const root = "fakeroot"
 // Load builds the virtual filesystem for an instance, rendering every embedded
 // template against the persona.
 func Load(p *persona.Persona) (*vfs.FS, error) {
-	return vfs.Load(fakerootFS, root, renderer(p))
+	f, err := vfs.Load(fakerootFS, root, renderer(p))
+	if err != nil {
+		return nil, err
+	}
+	populate(f, p)
+	return f, nil
 }
 
 // renderer rewrites any file containing a template placeholder against the

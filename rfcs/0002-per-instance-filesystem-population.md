@@ -1,6 +1,5 @@
 # RFC 0002: Per-instance filesystem population
 
-Roadmap: [Direction 1](../ROADMAP.md#1-per-instance-filesystem-population).
 Doctrine: VISION §7 (unpredictable from the source).
 
 ## Problem
