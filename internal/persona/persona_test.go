@@ -8,7 +8,7 @@ import (
 )
 
 var validProtocols = map[string]bool{
-	"adb": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true,
+	"adb": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true, "redis": true,
 }
 
 func TestGenerateIsComplete(t *testing.T) {
@@ -17,7 +17,7 @@ func TestGenerateIsComplete(t *testing.T) {
 		"hostname": p.Hostname, "host_ip": p.HostIP, "profile": p.Profile,
 		"openssh": p.OpenSSHVer, "busybox": p.BusyBoxVer, "wp": p.WPVer,
 		"tomcat": p.TomcatVer, "nginx": p.NginxVer, "php": p.PHPVer,
-		"ftp_software": p.FTPSoftware, "ftp_version": p.FTPVer,
+		"ftp_software": p.FTPSoftware, "ftp_version": p.FTPVer, "redis": p.RedisVer,
 		"root_hash": p.RootPwHash, "ssh_fp": p.SSHKeyFP, "machine_id": p.MachineID,
 		"fs_seed": p.FSSeed,
 	} {
@@ -69,7 +69,7 @@ func TestGenerateProfileFullHasEveryProtocol(t *testing.T) {
 	for _, s := range p.Services {
 		seen[s.Protocol] = true
 	}
-	for _, proto := range []string{"adb", "ftp", "ssh", "telnet", "http", "https"} {
+	for _, proto := range []string{"adb", "ftp", "ssh", "telnet", "http", "https", "redis"} {
 		if !seen[proto] {
 			t.Errorf("full profile missing %s", proto)
 		}
@@ -84,6 +84,16 @@ func TestLegacyProfileExposesADB(t *testing.T) {
 		}
 	}
 	t.Fatalf("legacy profile should expose ADB on 5555, services: %+v", p.Services)
+}
+
+func TestInfraProfileExposesRedis(t *testing.T) {
+	p := GenerateProfile("infra")
+	for _, s := range p.Services {
+		if s.Protocol == "redis" && s.Port == 6379 {
+			return
+		}
+	}
+	t.Fatalf("infra profile should expose Redis on 6379, services: %+v", p.Services)
 }
 
 func TestGenerateProfileNamed(t *testing.T) {
@@ -212,6 +222,7 @@ func TestSoftwareVersionsVaryAndAreInPool(t *testing.T) {
 		{"NginxVer", func(p *Persona) string { return p.NginxVer }, nginxPool},
 		{"ApacheVer", func(p *Persona) string { return p.ApacheVer }, apachePool},
 		{"PHPVer", func(p *Persona) string { return p.PHPVer }, phpPool},
+		{"RedisVer", func(p *Persona) string { return p.RedisVer }, redisPool},
 	}
 	ps := make([]*Persona, N)
 	for i := range ps {

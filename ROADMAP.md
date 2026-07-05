@@ -27,13 +27,13 @@ wired in one place (`cmd/sweetty`). That is the cheap part of adding surface; th
 point is which surface.
 
 The direction is the services a loader reaches for once the easy shells are
-exhausted, and that a shell-only sensor never sees: an unauthenticated Redis, a
-Docker Engine API, and the database and file-sharing ports that carry their own
-command-injection kill chains. Each one draws a chain that today lands on a closed
-port and reveals nothing, and each one lands inside the same boundary as the
-shell: intent captured, nothing fetched, nothing run, nothing written to the host.
-It is §2 and §3 applied to a wider door, and it costs the doctrine nothing,
-because the boundary already holds every handler by construction.
+exhausted, and that a shell-only sensor never sees: a Docker Engine API and the
+database and file-sharing ports that carry their own command-injection kill
+chains. Each one draws a chain that today lands on a closed port and reveals
+nothing, and each one lands inside the same boundary as the shell: intent
+captured, nothing fetched, nothing run, nothing written to the host. It is §2 and
+§3 applied to a wider door, and it costs the doctrine nothing, because the
+boundary already holds every handler by construction.
 
 ### 2. Bait that bites back after they leave
 

@@ -24,6 +24,7 @@ import (
 	"sweetty/internal/proto/ftp"
 	httpproto "sweetty/internal/proto/http"
 	"sweetty/internal/proto/https"
+	"sweetty/internal/proto/redis"
 	"sweetty/internal/proto/ssh"
 	"sweetty/internal/proto/telnet"
 	"sweetty/internal/server"
@@ -230,6 +231,8 @@ func buildProtocol(lc config.Listener, p *persona.Persona, base *vfs.FS) server.
 		return ftp.New(p)
 	case "adb":
 		return adb.New(base, p)
+	case "redis":
+		return redis.New(p)
 	}
 	return nil
 }

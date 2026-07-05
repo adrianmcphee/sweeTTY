@@ -76,7 +76,7 @@ type AdminConsole struct {
 
 type Listener struct {
 	Port     int    `json:"port"`
-	Protocol string `json:"protocol"` // telnet | ssh | http | https | ftp | adb
+	Protocol string `json:"protocol"` // telnet | ssh | http | https | ftp | adb | redis
 	Persona  string `json:"persona,omitempty"`
 }
 
