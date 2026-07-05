@@ -20,6 +20,7 @@ import (
 	"sweetty/internal/haproxy"
 	"sweetty/internal/persona"
 	"sweetty/internal/portal"
+	"sweetty/internal/proto/adb"
 	"sweetty/internal/proto/ftp"
 	httpproto "sweetty/internal/proto/http"
 	"sweetty/internal/proto/https"
@@ -227,6 +228,8 @@ func buildProtocol(lc config.Listener, p *persona.Persona, base *vfs.FS) server.
 		return https.New(p)
 	case "ftp":
 		return ftp.New(p)
+	case "adb":
+		return adb.New(base, p)
 	}
 	return nil
 }

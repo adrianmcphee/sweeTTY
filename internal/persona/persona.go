@@ -324,7 +324,7 @@ var profiles = []profileDef{
 		// A BusyBox banner over this Ubuntu userland (dpkg/systemd present) never
 		// added up, so the appliance wears Ubuntu end to end.
 		style := "ubuntu"
-		s := []ServiceSpec{{"telnet", 23, style}, {"http", 80, "nginx-static"}}
+		s := []ServiceSpec{{"telnet", 23, style}, {"http", 80, "nginx-static"}, {"adb", 5555, ""}}
 		if chance(40) {
 			s = append(s, ServiceSpec{"ftp", 21, ""})
 		}
@@ -383,6 +383,7 @@ func fullServices() []ServiceSpec {
 		{"telnet", 23, "ubuntu"},
 		{"http", 80, "wordpress"},
 		{"https", 443, ""},
+		{"adb", 5555, ""},
 		{"telnet", 2323, "ubuntu"},
 		{"http", 8080, "tomcat"},
 	}

@@ -120,7 +120,7 @@ network, executing attacker input, or writing to the host disk.
 - **Cooked-TTY line discipline edits and terminates lines, swallows CRLF, and ends on Ctrl-D**. _internal/proto/ssh: TestCookedTTYEditsAndTerminatesLines, TestCookedTTYSwallowsCRLF, TestCookedTTYCtrlDEndsSession_
 - **The handshake survives a PROXY header glued to the client banner**: bytes the header parse buffered are replayed into the key exchange rather than dropped, so a client that races the parse behind the HAProxy edge is not disconnected mid-kex. _internal/proto/ssh: TestHandshakeSurvivesProxyHeaderReadAhead_
 
-## HTTP, HTTPS, FTP
+## HTTP, HTTPS, FTP, ADB
 
 - **HTTP responses match the configured stack** (nginx, apache, tomcat, wordpress): header content and order, Date/Server placement, method handling (405 without Allow, per-daemon unknown method), WordPress REST link and login signature, HEAD headers-only. _internal/proto/http: TestNginxServerHeaderIsBareAndBeforeDate, TestApacheEmitsDateBeforeServer, TestTomcatSendsNoServerHeader, TestPerStackHeaderOrder, TestNginxNonGetMethodIs405WithoutAllow, TestUnknownMethodIsPerDaemon, TestWordPressFrontPageHasRestApiLink, TestWordPressLoginSignatureHeaders, TestHeadReturnsHeadersOnly, TestNginxServesExactDefaultIndex, TestTomcatEmptyReasonAndDefault404, TestTomcatHomeSingleVersionHeading_
 - **POST bodies are hashed (SHA); routes resolve per stack**. _internal/proto/http: TestPostIsLoggedWithSHA, TestPostShaMatchesBody, TestRootResponseByStyle, TestWordPressRoutes, TestTomcatRoutes, TestNginxRoutes, TestParseRequestLine_
@@ -129,6 +129,7 @@ network, executing attacker input, or writing to the host disk.
 - **HTTPS captures the TLS ClientHello and writes no application bytes**. _internal/proto/https: TestHTTPSNeverWritesBytesAndCapturesHello, TestTLSHelloCaptured_
 - **An HTTPS session's cast records a readable classification of the hello (kind plus hex dump), never the raw binary record**, so the live watch and replay show terminal text instead of mojibake; the faithful hex stays in the TLS_HELLO event. _internal/proto/https: TestCastRecordsReadableHelloNotRawBytes_
 - **FTP matches the configured daemon and captures credentials** (vsftpd, proftpd, pureftpd; banner; QUIT). _internal/proto/ftp: TestFTPVsftpdBehaviour, TestFTPPureFTPdBehaviour, TestFTPProFTPdBehaviour, TestFTPBannerAndCredentialCapture, TestFTPQuit_
+- **ADB exposes an appliance-style TCP 5555 surface**: the CNXN banner derives from the persona, `shell:` payloads run through the inert shared shell and capture download intent without dialing, `sync:` pushes are logged as droppers without touching the host filesystem, malformed packets reach no command path, and legacy/full profiles wire the service. _internal/proto/adb: TestADBBannerMatchesPersona, TestADBShellCapturesKillChainWithoutDialing, TestADBSyncPushIsLoggedAsDropperAndHostUntouched, TestADBDropsMalformedPacketsWithoutCommandEvents; internal/persona: TestLegacyProfileExposesADB, TestGenerateProfileFullHasEveryProtocol; cmd/sweetty: TestBuildProtocolWiresEveryConfiguredProtocol_
 
 ## Source attribution and scan detection
 

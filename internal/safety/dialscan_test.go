@@ -34,7 +34,7 @@ func TestNoOutboundDialCalls(t *testing.T) {
 	// not an attacker-input handler, and dials the local HAProxy admin unix socket.
 	for _, pkg := range []string{
 		"shell", "vfs", "fakehost", "server", "proxyproto", "portal", "event", "record", "persona",
-		"proto/telnet", "proto/ssh", "proto/http", "proto/https", "proto/ftp",
+		"proto/telnet", "proto/ssh", "proto/http", "proto/https", "proto/ftp", "proto/adb",
 	} {
 		scanForOutboundCalls(t, filepath.Join(internal, filepath.FromSlash(pkg)), pkg)
 	}

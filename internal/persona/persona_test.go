@@ -8,7 +8,7 @@ import (
 )
 
 var validProtocols = map[string]bool{
-	"ftp": true, "ssh": true, "telnet": true, "http": true, "https": true,
+	"adb": true, "ftp": true, "ssh": true, "telnet": true, "http": true, "https": true,
 }
 
 func TestGenerateIsComplete(t *testing.T) {
@@ -69,11 +69,21 @@ func TestGenerateProfileFullHasEveryProtocol(t *testing.T) {
 	for _, s := range p.Services {
 		seen[s.Protocol] = true
 	}
-	for _, proto := range []string{"ftp", "ssh", "telnet", "http", "https"} {
+	for _, proto := range []string{"adb", "ftp", "ssh", "telnet", "http", "https"} {
 		if !seen[proto] {
 			t.Errorf("full profile missing %s", proto)
 		}
 	}
+}
+
+func TestLegacyProfileExposesADB(t *testing.T) {
+	p := GenerateProfile("legacy")
+	for _, s := range p.Services {
+		if s.Protocol == "adb" && s.Port == 5555 {
+			return
+		}
+	}
+	t.Fatalf("legacy profile should expose ADB on 5555, services: %+v", p.Services)
 }
 
 func TestGenerateProfileNamed(t *testing.T) {
