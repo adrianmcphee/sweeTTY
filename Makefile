@@ -19,7 +19,7 @@ LDFLAGS    := -s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build run version test vet fmt fmt-check check tidy cover clean release-local hooks
+.PHONY: help build run version test adversary vet fmt fmt-check check tidy cover clean release-local hooks
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -37,6 +37,9 @@ version: build ## Print the embedded build metadata
 test: ## Run all tests
 	go test $(PKG)
 
+adversary: ## Run the anti-detection gate
+	go test ./internal/adversary/...
+
 vet: ## Run go vet
 	go vet $(PKG)
 
@@ -47,7 +50,7 @@ fmt-check: ## Fail if any Go file is not gofmt-clean
 	@out=$$(gofmt -l $(GOFILES)); \
 		if [ -n "$$out" ]; then echo "unformatted:"; echo "$$out"; exit 1; fi
 
-check: fmt-check vet build test ## The gate before committing: fmt-check + vet + build + test
+check: fmt-check vet build adversary test ## The gate before committing: fmt-check + vet + build + adversary + test
 
 tidy: ## Tidy go.mod / go.sum
 	go mod tidy

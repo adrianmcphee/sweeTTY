@@ -32,6 +32,8 @@ jobs:
         run: go vet ./...
       - name: build
         run: go build ./...
+      - name: adversary
+        run: make adversary
       # -race guards the event.Logger mutex and the portal feed broadcaster; -count=1
       # stops a cached pass from hiding a newly-flaky test; -timeout caps a hung
       # tarpit goroutine instead of letting it wedge the runner.

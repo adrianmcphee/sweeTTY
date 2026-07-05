@@ -36,14 +36,15 @@ type Session struct {
 	port     int
 	protocol Protocol
 
-	IP        string           // remote "ip:port"
-	SrcIP     string           // remote ip only
-	DstIP     string           // local ip
-	ID        string           // per-connection id, correlates every event
-	Persona   *persona.Persona // attached identity, nil until a protocol sets it
-	StartTime time.Time
-	CmdCount  int
-	Username  string
+	IP         string           // remote "ip:port"
+	SrcIP      string           // remote ip only
+	DstIP      string           // local ip
+	ID         string           // per-connection id, correlates every event
+	Persona    *persona.Persona // attached identity, nil until a protocol sets it
+	StartTime  time.Time
+	CmdCount   int
+	Username   string
+	lineEnding string
 
 	IdleTimeout time.Duration
 	// Deadline is the absolute time the connection must end by, regardless of
@@ -259,7 +260,22 @@ func (s *Session) WriteBytes(b []byte) {
 	s.conn.Write(b)
 }
 
-func (s *Session) Writeln(str string) { s.Write(str + "\r\n") }
+func (s *Session) LineEnding() string {
+	if s.lineEnding != "" {
+		return s.lineEnding
+	}
+	return "\r\n"
+}
+
+func (s *Session) SetLineEnding(ending string) {
+	s.lineEnding = ending
+}
+
+func (s *Session) WithLineEndings(str string) string {
+	return strings.ReplaceAll(str, "\n", s.LineEnding())
+}
+
+func (s *Session) Writeln(str string) { s.Write(str + s.LineEnding()) }
 
 // Capturing reports whether the session is in non-terminal capture mode, so the
 // shell can skip the realism pauses it would apply for a live viewer: an HTTP RCE

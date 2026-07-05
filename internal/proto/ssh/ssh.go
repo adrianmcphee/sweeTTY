@@ -304,6 +304,7 @@ func (pr *Protocol) serveSession(s *server.Session, nc gossh.NewChannel) {
 		s.SetEchoController(ct)
 	} else {
 		s.Rebind(ch)
+		s.SetLineEnding("\n")
 	}
 
 	exitCode := 0

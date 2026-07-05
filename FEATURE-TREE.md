@@ -61,6 +61,10 @@ file. Design rationale lives in the companion docs ([VISION.md](./VISION.md),
 - **Banners, uname, /etc/\*, and the prompt agree across telnet, ssh, http, and ftp**. _internal/crosscheck: TestEveryServiceTellsOnePersonaStory_
 - **Identity is consistent across sources within a live session**. _internal/proto/telnet: TestCrossSourceIdentityCoherence, TestMetadataViewsAgree_
 
+## Adversary gate
+
+- **The anti-detection gate probes live services over their wire surfaces**: SSH algorithm offers match the advertised OpenSSH release and stay stable across handshakes; service banners tell one persona story; `ls -l` and `cat` agree from a real SSH session; repeated listings stay byte-stable; responses do not leak the real host identity. _internal/adversary: TestSSHAlgorithmOfferMatchesBanner, TestSSHOfferIsStableAcrossHandshakes, TestBannersAgreeAcrossServices, TestListingAndReadNeverDisagree, TestRepeatedListingsAreStable, TestNoServiceLeaksHostIdentity_
+
 ## Safety boundary (VISION §2)
 
 - **No attacker-reachable package imports `os/exec`, a network dialer, or the host filesystem**; the build fails if a new proto or handler package is unguarded. _internal/safety: TestHandlersHaveNoCapabilityImports, TestEveryProtoPackageIsGuarded, TestEveryAttackerReachablePackageIsGuarded_

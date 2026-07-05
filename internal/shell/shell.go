@@ -326,7 +326,7 @@ func (sh *Shell) emit(stg stage, out string) {
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	sh.s.Write(strings.ReplaceAll(out, "\n", "\r\n"))
+	sh.s.Write(sh.s.WithLineEndings(out))
 }
 
 func (sh *Shell) expandStage(stg stage) []string {
