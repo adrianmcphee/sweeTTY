@@ -165,7 +165,8 @@ The portal binds **loopback** on a fixed port (`portal_port`, default `8888`), s
 Through the tunnel you get:
 
 - A **live feed** of events streamed over Server-Sent Events, colour-coded by type, with stat cards for sessions, unique sources, download attempts, and bait tripped.
-- A **Sources** view ranking every host that has touched the honeypot, tagging each with an assessed kind (loader, brute-force, scanner, or a tentative human) and a returning-visitor badge, filterable to returning visitors, bots, or humans, and a **Honeytokens** view breaking the planted-bait triggers down by source and country.
+- A **Sources** view ranking every host that has touched the honeypot, tagging each with an assessed kind (loader, brute-force, scanner, or a tentative human) and a returning-visitor badge, filterable to returning visitors, bots, humans, or the service they hit, and a **Honeytokens** view breaking the planted-bait triggers down by source and country.
+- An **Exposed services** panel showing the sensor's own attack surface: every open service with its public port, protocol, persona, live hit and scan counts, and whether it is actually serving, so you see what is exposed even before anything probes it. Click a service (or pick it from the service dropdown) to narrow the Sources list to just that protocol, with a summary line giving the human, bot, and scanner split, so a question like "the telnet attackers, which were human and which were bots" reads off directly.
 - **Per-IP drill-down**: click any event or source to see that IP's assessment first (the bot/human verdict with the evidence behind it, a phase ribbon from recon to exploit, and a timeline of its visits), then its sessions, credentials tried, commands run, download attempts, and full chronological transcript.
 - **Session replay**: where `record_dir` is set, recorded sessions get a replay link that plays the captured terminal back inline.
 - **Operator consoles**: any local admin console named in `admin_consoles` (such as the HAProxy stats page) is reverse-proxied into the sidebar and reached over the same SSH tunnel.
@@ -188,7 +189,7 @@ A link per console appears in the topbar, opening it at `/dashboard/console/<nam
 
 ## Releases
 
-The release is **manual**: trigger the workflow from the Actions tab (`workflow_dispatch`) or with `gh workflow run release.yml`. With no version input it bumps the patch from the last tag; pass a `version` (for example `-f version=v0.2.0`) to cut a specific major/minor. The run builds version-stamped, statically linked binaries for `linux/amd64`, `linux/arm64`, `darwin/amd64`, and `darwin/arm64`, writes a `checksums.txt`, creates the `vX.Y.Z` tag and GitHub Release, and signs a build-provenance attestation for each archive (verify one with `gh attestation verify <file> --repo adrianmcphee/sweetty`). Nothing is built or published on an ordinary push to `main`. Build the same archives locally with `make release-local`. The instance template pulls a pinned tag's `linux` archive, verifies it against `checksums.txt`, and rolls it into place.
+The release is **manual**: trigger the workflow from the Actions tab (`workflow_dispatch`) or with `gh workflow run release.yml`. With no version input it bumps the patch from the last tag; pass an explicit `version` (a `vX.Y.Z` tag) to cut a specific major/minor. The run builds version-stamped, statically linked binaries for `linux/amd64`, `linux/arm64`, `darwin/amd64`, and `darwin/arm64`, writes a `checksums.txt`, creates the `vX.Y.Z` tag and GitHub Release, and signs a build-provenance attestation for each archive (verify one with `gh attestation verify <file> --repo adrianmcphee/sweetty`). Nothing is built or published on an ordinary push to `main`. Build the same archives locally with `make release-local`. The instance template pulls a pinned tag's `linux` archive, verifies it against `checksums.txt`, and rolls it into place.
 
 ### Getting the binaries
 
@@ -196,8 +197,8 @@ The same archives are also published as a single OCI artifact to the GitHub Cont
 
 ```bash
 # Pull the cross-platform archives (all four targets + checksums.txt) for a tag
-oras pull ghcr.io/adrianmcphee/sweetty:v0.1.0
-tar -xzf sweetty_0.1.0_linux_amd64.tar.gz
+oras pull ghcr.io/adrianmcphee/sweetty:vX.Y.Z
+tar -xzf sweetty_X.Y.Z_linux_amd64.tar.gz
 ```
 
 Or just download the `.tar.gz` for your platform straight from the [GitHub Release](https://github.com/adrianmcphee/sweetty/releases). Either way, verify it against `checksums.txt`. The instance template automates this: it pulls a pinned tag's `linux` archive, checks the SHA256, and rolls it into place.

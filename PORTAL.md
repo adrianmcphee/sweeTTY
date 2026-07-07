@@ -75,6 +75,7 @@ The mechanics, all in `internal/portal/store.go`:
 - **Equivalence is the contract.** Folding incrementally with reads in between produces byte-identical responses to a fresh process folding the finished log in one pass. A test pins exactly that property, alongside rotation, partial-line, and eviction tests (`internal/portal/store_test.go`).
 - **The live projection holds only open sessions.** A `SESSION_END` deletes its entry immediately and idle orphans (a hard restart loses its END) are swept past double the rail's visibility window, so the projection cannot accumulate every session id the log has ever seen.
 - **Verdicts share one fold.** The per-source bot/human classifier (`internal/portal/analyze.go`) folds events through the same `observe` used by the per-IP drawer, so the tag on the sources list and the verdict in the drawer can never disagree.
+- **The overview also carries the configured surface.** Alongside the folded projections, the overview response lists every configured listener (the public port an attacker reaches, protocol, persona, whether it actually bound, and its hit and scan tally from the port projection), so the console shows what the sensor exposes rather than only what has been hit, and a configured port whose backend never came up reads as not serving. The Sources view can then filter attackers to a single service and report their human-versus-bot split.
 
 ## Drill-downs: bounded streaming scans
 

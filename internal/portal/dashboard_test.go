@@ -247,6 +247,15 @@ func TestDashboardHasSourceFilters(t *testing.T) {
 		`id="src_search"`,
 		"function populateCountryFilter",
 		".fsearch{",
+		// Service filter and the exposed-services surface it is driven from.
+		`id="src_proto"`,
+		`id="src_summary"`,
+		"function populateProtoFilter",
+		"function filterByProto",
+		"function renderSrcSummary",
+		"function surfaceRow",
+		"Exposed services",
+		".srcsum{",
 	} {
 		if !strings.Contains(dashboardHTML, want) {
 			t.Errorf("dashboard page missing the Sources-filter hook %q", want)

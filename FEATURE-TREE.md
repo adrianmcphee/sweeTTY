@@ -175,11 +175,14 @@ network, executing attacker input, or writing to the host disk.
 - **The overview rollup tags every source with its kind, visit count, and a returning flag** from the same analyzer, so the Sources list shows what each source is and which ones have come back without a per-row request. _internal/portal: TestOverviewMarksReturningAndKind_
 - **The Sources view shows each source's kind and a returning badge, and filters by them**: a coloured kind chip (loader, brute, scan, human?), a visit-count badge on repeat visitors, All / Returning / Bots / Human? filter buttons, a country dropdown, and a free-text search over IP, country, and ISP, all composing client-side. _internal/portal: TestDashboardHasSourceFilters_
 - **The per-IP drawer leads with an assessment panel**: the verdict and confidence, the evidence behind it, a phase ribbon (recon, brute, access, exploit), and a visit timeline, all from the byIP profile. _internal/portal: TestDashboardRendersAssessmentPanel_
+- **The console shows the sensor's own configured surface, not only observed traffic**: an Exposed services panel lists every configured listener with the public port an attacker reaches (falling back to the bound port when the config carries none), its protocol and persona, its live hit and scan tallies, and whether it is actually serving, so a port that has drawn no traffic still appears and a configured port whose backend never bound reads as not serving. _internal/portal: TestOverviewSurface_
+- **Attackers filter by the service they hit, with a human-versus-bot split**: a service dropdown, and a click on any Exposed services or Ports row, narrows the Sources list to the attackers that touched that protocol, and a summary line reports how many match and their human, bot, scanner, and unclassified split. _internal/portal: TestOverviewSurface, TestDashboardHasSourceFilters_
 
 ## Configuration and secrets
 
 - **Config is generated from the persona; the portal binds a fixed loopback port (`8888`)**. _internal/config: TestGenerateFromPersona, TestPortalPortIsFixedLoopback_
 - **Writing the default config refuses to overwrite an existing file**. _internal/config: TestWriteDefaultConfigRefusesOverwrite_
+- **A listener can record the public port an attacker reaches, distinct from the port the process binds**, so behind an edge that fronts a loopback backend the console reports the real public port, falling back to the bound port when it is unset. _internal/portal: TestOverviewSurface_
 
 ## Build wiring
 

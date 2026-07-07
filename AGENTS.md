@@ -142,4 +142,4 @@ State present-tense first principles: what the thing is and does, and why. Nothi
   status is just cruft that goes stale.
 - No meta-commentary about the document itself ("this document is how we...").
 - State current limitations as plain facts, not backlog tiers.
-- No em dashes (hard rule), anywhere, including docs and comments.
+- No em dashes (hard rule), anywhere, including docs and comments. `make check` runs `em-dash-check`, which fails on an em dash in any tracked file.

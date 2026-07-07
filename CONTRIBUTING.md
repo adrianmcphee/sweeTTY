@@ -22,7 +22,7 @@ rather than a pull request.
 
    ```bash
    make hooks   # once per clone: installs the commit-msg hook
-   make check   # go build + go vet + go test ./...
+   make check   # gofmt-check + em-dash-check + go vet + go build + adversary + go test ./...
    ```
 
 5. Open a pull request against `main`, and say what changed and why.
