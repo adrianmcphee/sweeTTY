@@ -123,6 +123,10 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 .fsearch{min-width:190px}
 .fsel:focus,.fsearch:focus{border-color:var(--bd2)}
 .fsearch::placeholder{color:var(--mut2)}
+.srcsum{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:9px 16px;border-bottom:1px solid var(--bd);font-size:12px;color:var(--mut)}
+.srcsum:empty{display:none}
+.srcsum .kc{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--bd);border-radius:999px;padding:3px 10px;font-variant-numeric:tabular-nums}
+.srcsum .kd{width:8px;height:8px;border-radius:50%}
 .htbar{display:flex;gap:20px;padding:14px 16px;border-bottom:1px solid var(--bd);flex-wrap:wrap}
 .htbar .m{display:flex;flex-direction:column;gap:3px}
 .htbar .m b{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums}
@@ -317,9 +321,11 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <button class="fbtn" data-srcfilter="returning">Returning</button>
 <button class="fbtn" data-srcfilter="bots">Bots</button>
 <button class="fbtn" data-srcfilter="human">Human?</button>
+<select class="fsel" id="src_proto"><option value="">All services</option></select>
 <select class="fsel" id="src_country"><option value="">All countries</option></select>
 <input class="fsearch" id="src_search" type="text" placeholder="search ip / country / isp" autocomplete="off">
 </div>
+<div class="srcsum" id="src_summary"></div>
 <div class="scroll" id="sources"></div>
 </div>
 </section>
@@ -543,11 +549,12 @@ t.style.color=k[1];
 return t;
 }
 var statScope='today';
-var srcFilter='all',srcCountry='',srcSearch='';
+var srcFilter='all',srcCountry='',srcSearch='',srcProto='';
 function matchSrcFilter(r){
 if(srcFilter==='returning'&&!r.returning)return false;
 if(srcFilter==='bots'&&(r.kind||'').slice(0,3)!=='bot')return false;
 if(srcFilter==='human'&&r.kind!=='human?')return false;
+if(srcProto){var pr=r.protocols||[];if(pr.indexOf(srcProto)<0)return false;}
 if(srcCountry&&(r.country||r.scope||'')!==srcCountry)return false;
 if(srcSearch){
 var hay=((r.ip||'')+' '+(r.country||'')+' '+(r.scope||'')+' '+(r.org||'')).toLowerCase();
@@ -574,12 +581,45 @@ var box=document.getElementById('sources');
 box.textContent='';
 var list=(overview&&overview.sources)||[];
 setNum('src_count',(overview&&overview.totals&&overview.totals.sources)||list.length);
-var shown=0;
-for(var n=0;n<list.length;n++){
-if(!matchSrcFilter(list[n]))continue;
-box.appendChild(srcRow(list[n]));shown++;
+var shown=[];
+for(var n=0;n<list.length;n++){if(matchSrcFilter(list[n]))shown.push(list[n]);}
+renderSrcSummary(shown);
+for(var i=0;i<shown.length;i++)box.appendChild(srcRow(shown[i]));
+if(!shown.length)box.appendChild(el('div','empty',list.length?'No sources match this filter.':'No sources yet.'));
 }
-if(!shown)box.appendChild(el('div','empty',list.length?'No sources match this filter.':'No sources yet.'));
+// kindOf folds a source's assessed kind into one of four buckets for the summary.
+function kindOf(r){var k=r.kind||'';if(k.slice(0,3)==='bot')return 'bot';if(k==='scanner')return 'scanner';if(k==='human?')return 'human';return 'unknown';}
+// renderSrcSummary shows, when any filter is active, how many attackers match and
+// their human-vs-bot split, so "telnet attackers, which were human vs bots" reads
+// off directly. Empty (and hidden by CSS) when no filter is set.
+function renderSrcSummary(rows){
+var sum=document.getElementById('src_summary');if(!sum)return;sum.textContent='';
+var active=srcProto||srcCountry||srcSearch||srcFilter!=='all';
+if(!active||!rows.length)return;
+var c={human:0,bot:0,scanner:0,unknown:0};
+for(var i=0;i<rows.length;i++)c[kindOf(rows[i])]++;
+sum.appendChild(el('span','',rows.length+(rows.length===1?' attacker':' attackers')+(srcProto?' on '+srcProto:'')));
+var defs=[['human','human?','#4ade80'],['bot','bots','#f87171'],['scanner','scanners','#60a5fa'],['unknown','unclassified','#8a8a93']];
+for(var d=0;d<defs.length;d++){if(!c[defs[d][0]])continue;var chip=el('span','kc');var dot=el('span','kd');dot.style.background=defs[d][2];chip.appendChild(dot);chip.appendChild(el('span','',c[defs[d][0]]+' '+defs[d][1]));sum.appendChild(chip);}
+}
+// filterByProto is the click target for a service or port row: filter Sources to
+// the attackers that touched that protocol and switch to the Sources view.
+function filterByProto(pr){
+srcProto=pr||'';
+var sel=document.getElementById('src_proto');if(sel)sel.value=srcProto;
+showView('sources');
+renderSources();
+}
+// populateProtoFilter fills the service dropdown from the configured surface, so
+// every exposed service is selectable even before it has drawn any traffic.
+function populateProtoFilter(surface){
+var sel=document.getElementById('src_proto');if(!sel)return;
+var cur=sel.value,seen={},protos=[];
+for(var i=0;i<surface.length;i++){var pr=surface[i].protocol;if(pr&&!seen[pr]){seen[pr]=true;protos.push(pr);}}
+protos.sort();
+sel.textContent='';sel.appendChild(optEl('','All services'));
+for(var j=0;j<protos.length;j++)sel.appendChild(optEl(protos[j],protos[j]));
+sel.value=cur;
 }
 function srcRow(r){
 var div=el('div','row');
@@ -635,6 +675,7 @@ var st=el('span','t');st.style.width='128px';
 if(s.listening){st.textContent=(s.hits||0)+((s.hits===1)?' hit':' hits')+(s.scans?' · '+s.scans+' scan'+(s.scans===1?'':'s'):'');}
 else{st.textContent='not serving';st.style.color='#f87171';}
 div.appendChild(st);
+if(s.protocol){div.style.cursor='pointer';div.title='filter attackers on '+s.protocol;div.addEventListener('click',function(){filterByProto(s.protocol);});}
 return div;
 }
 function portRow(p){
@@ -643,6 +684,7 @@ div.appendChild(el('span','ip',':'+p.port));
 var b=el('span','badge');b.style.width='92px';var bd=el('span','bd');bd.style.background=var_acc;b.appendChild(bd);b.appendChild(el('span','bn',p.protocol||'?'));div.appendChild(b);
 div.appendChild(el('span','msg',p.hits+(p.hits===1?' hit':' hits')));
 var sc=el('span','t');sc.style.width='84px';if(p.scans){sc.textContent=p.scans+(p.scans===1?' scan':' scans');sc.style.color='#f87171';}div.appendChild(sc);
+if(p.protocol){div.style.cursor='pointer';div.title='filter attackers on '+p.protocol;div.addEventListener('click',function(){filterByProto(p.protocol);});}
 return div;
 }
 function countryRow(cc){
@@ -694,6 +736,7 @@ setNum('s_sessions',sc.sessions||0);setNum('s_ips',sc.sources||0);setNum('s_dl',
 setNum('s_ht',sc.bait||0);setNum('s_scans',sc.port_scans||0);setNum('nav_ht',sc.bait||0);setNum('nav_pl',sc.downloads||0);
 var bv=document.getElementById('build_ver');if(bv&&overview.version)bv.textContent=overview.version;
 populateCountryFilter(overview.sources||[]);
+populateProtoFilter(overview.surface||[]);
 if(curView==='sources')renderSources();
 if(curView==='recon')renderRecon();
 }
@@ -1330,6 +1373,8 @@ applyOverview();
 });
 var scSel=document.getElementById('src_country');
 if(scSel)scSel.addEventListener('change',function(){srcCountry=this.value;renderSources();});
+var spSel=document.getElementById('src_proto');
+if(spSel)spSel.addEventListener('change',function(){srcProto=this.value;renderSources();});
 var scInput=document.getElementById('src_search');
 if(scInput)scInput.addEventListener('input',function(){srcSearch=this.value.toLowerCase();renderSources();});
 document.getElementById('bait_card').addEventListener('click',function(){showView('honeytokens');});
