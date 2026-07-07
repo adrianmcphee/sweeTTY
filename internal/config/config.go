@@ -78,6 +78,12 @@ type Listener struct {
 	Port     int    `json:"port"`
 	Protocol string `json:"protocol"` // telnet | ssh | http | https | ftp | adb | mysql | redis | docker
 	Persona  string `json:"persona,omitempty"`
+	// PublicPort is the port an attacker actually reaches, when it differs from the
+	// port this process binds. Under the HAProxy edge the process binds a loopback
+	// backend (e.g. 10022) while the world hits the public port (22); the renderer
+	// records that public port here so the console can show the real attack surface.
+	// Zero means it equals Port (the direct topology, or a hand-written config).
+	PublicPort int `json:"public_port,omitempty"`
 }
 
 func DefaultConfig() Config {

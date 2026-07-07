@@ -346,6 +346,7 @@ nav{flex:1;overflow-y:auto;padding:4px 10px 10px}
 <div class="card statcard"><div class="top"><span class="ico t-teal" data-icon="downloads"></span><span class="lbl">Attempts</span></div><div class="num" id="r_attempts">0</div></div>
 </div>
 <div class="recon">
+<div class="panel" style="grid-column:1/-1;flex:none"><div class="panelhead"><span data-icon="scan"></span>Exposed services<span class="sp" style="flex:1"></span><span class="count" id="surf_count">0</span></div><div class="scroll" id="rec_surface" style="max-height:210px"></div></div>
 <div class="panel"><div class="panelhead"><span data-icon="scan"></span>Ports &amp; scans<span class="sp" style="flex:1"></span><span class="count" id="rp_count">0</span></div><div class="scroll" id="rec_ports"></div></div>
 <div class="panel"><div class="panelhead"><span data-icon="ips"></span>Countries<span class="sp" style="flex:1"></span><span class="count" id="rc_count">0</span></div><div class="scroll" id="rec_countries"></div></div>
 <div class="panel"><div class="panelhead"><span data-icon="ips"></span>Top ISPs<span class="sp" style="flex:1"></span><span class="count" id="ri_count">0</span></div><div class="scroll" id="rec_isps"></div></div>
@@ -603,6 +604,10 @@ var var_acc='#60a5fa';
 
 function renderRecon(){
 var o=overview||{},ports=o.by_port||[],ctys=o.by_country||[],uas=o.user_agents||[];
+var surf=o.surface||[];
+var sb=document.getElementById('rec_surface');sb.textContent='';setNum('surf_count',surf.length);
+if(!surf.length)sb.appendChild(el('div','empty','No services configured.'));
+for(var s=0;s<surf.length;s++)sb.appendChild(surfaceRow(surf[s]));
 var pb=document.getElementById('rec_ports');pb.textContent='';setNum('rp_count',ports.length);
 if(!ports.length)pb.appendChild(el('div','empty','No port activity yet.'));
 for(var i=0;i<ports.length;i++)pb.appendChild(portRow(ports[i]));
@@ -616,10 +621,26 @@ var ab=document.getElementById('rec_agents');ab.textContent='';setNum('ra_count'
 if(!uas.length)ab.appendChild(el('div','empty','No client agents seen yet.'));
 for(var k=0;k<uas.length;k++)ab.appendChild(agentRow(uas[k]));
 }
+// surfaceRow renders one configured listener: the public port attackers reach, the
+// protocol and persona, and either its live hit/scan tally or, when a configured
+// port never bound, a red "not serving" so an open-but-dead edge port stands out.
+function surfaceRow(s){
+var div=el('div','row');
+var pt=el('span','ip',':'+(s.public_port||s.port));
+if(s.port&&s.public_port&&s.port!==s.public_port)pt.title='binds :'+s.port;
+div.appendChild(pt);
+var b=el('span','badge');b.style.width='84px';var bd=el('span','bd');bd.style.background=(s.listening?var_acc:'#f87171');b.appendChild(bd);b.appendChild(el('span','bn',s.protocol||'?'));div.appendChild(b);
+div.appendChild(el('span','msg',s.persona||''));
+var st=el('span','t');st.style.width='128px';
+if(s.listening){st.textContent=(s.hits||0)+((s.hits===1)?' hit':' hits')+(s.scans?' · '+s.scans+' scan'+(s.scans===1?'':'s'):'');}
+else{st.textContent='not serving';st.style.color='#f87171';}
+div.appendChild(st);
+return div;
+}
 function portRow(p){
 var div=el('div','row');
 div.appendChild(el('span','ip',':'+p.port));
-var b=el('span','badge');b.style.width='92px';var bd=el('span','bd');bd.style.background=var_acc;b.appendChild(bd);b.appendChild(el('span','bn',p.protocol||'—'));div.appendChild(b);
+var b=el('span','badge');b.style.width='92px';var bd=el('span','bd');bd.style.background=var_acc;b.appendChild(bd);b.appendChild(el('span','bn',p.protocol||'?'));div.appendChild(b);
 div.appendChild(el('span','msg',p.hits+(p.hits===1?' hit':' hits')));
 var sc=el('span','t');sc.style.width='84px';if(p.scans){sc.textContent=p.scans+(p.scans===1?' scan':' scans');sc.style.color='#f87171';}div.appendChild(sc);
 return div;
@@ -1163,7 +1184,7 @@ if(NOTABLE[e.event]){toast({icon:'downloads',event:e.event,title:labelOf(e.event
 // A honeytoken trip is the whole point of the trap: the attacker took the bait.
 // We mark it with a gold toast (a wink to turn-of-the-millennium pop), a confetti
 // burst, and an upbeat synthesized riff when sound is on.
-var PRIZE_LINES=['Bye bye bye — they took the bait','It’s gonna be ME: bait tripped','Cry me a river — attacker snared','SexyBack? more like trace-back','No strings attached, just a honeytoken'];
+var PRIZE_LINES=['Bye bye bye: they took the bait','It’s gonna be ME: bait tripped','Cry me a river: attacker snared','SexyBack? more like trace-back','No strings attached, just a honeytoken'];
 var prizeIdx=0;
 function prizeMoment(e){
 var line=PRIZE_LINES[prizeIdx%PRIZE_LINES.length];prizeIdx++;
@@ -1219,7 +1240,7 @@ try{localStorage.setItem('sweetty_snd',on?'1':'0');}catch(x){}
 if(on)ensureAudio();
 }
 // Chime on enable, within the click gesture (which also resumes the audio
-// context), so turning sound on gives immediate proof it works — the high-signal
+// context), so turning sound on gives immediate proof it works, the high-signal
 // alerts themselves are rare by design, so silence after a toggle reads as broken.
 sndBtn.addEventListener('click',function(){setSound(!soundOn);if(soundOn){tone(988,0,0.10,'triangle',0.11);tone(1318.51,0.09,0.13,'triangle',0.11);}});
 // Browsers keep a freshly created AudioContext suspended until a user gesture;

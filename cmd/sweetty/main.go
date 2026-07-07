@@ -282,6 +282,9 @@ func run(configPath string) {
 	fmt.Printf("persona: %s %s (%s)\n", p.Hostname, p.HostIP, p.PrettyName)
 
 	var servers []*server.Server
+	// active records which configured ports actually bound, so the console can flag a
+	// configured service that never came up (an open edge port with a dead backend).
+	active := map[int]bool{}
 	for _, lc := range cfg.Listeners {
 		proto := buildProtocol(lc, p, base)
 		if proto == nil {
@@ -301,6 +304,7 @@ func run(configPath string) {
 		} else {
 			fmt.Printf("listening :%d %s\n", lc.Port, proto.Name())
 		}
+		active[lc.Port] = true
 		servers = append(servers, srv)
 	}
 
@@ -325,6 +329,7 @@ func run(configPath string) {
 
 	pt := portal.New(cfg, lg)
 	pt.SetVersion(version)
+	pt.SetActiveListeners(active)
 	go func() {
 		if err := pt.Start(); err != nil {
 			// The portal is observability, not the core sensor, so a bind failure is

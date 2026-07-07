@@ -122,6 +122,7 @@ func (p *Portal) overview(w http.ResponseWriter, _ *http.Request) {
 			"port_scans": tScans,
 		},
 		"by_port":     sortedPorts(o.portStats),
+		"surface":     p.surfaceServices(o.portStats),
 		"by_country":  countryRollup(o.order, o.bySrc),
 		"by_isp":      ispRollup(o.order, o.bySrc),
 		"user_agents": topAgents(o.uaStats),

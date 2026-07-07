@@ -72,10 +72,20 @@ type Portal struct {
 	splashes  [][]byte      // gzipped boot-splash variants, one picked at random per load
 	version   string        // build version, shown in the console
 	store     store         // incremental projections over the log, see store.go
+	// active records which configured listener ports actually bound. main sets it
+	// after starting the servers, so the console can flag a configured service that
+	// is not serving (an open edge port with a dead backend). nil means unknown, in
+	// which case the surface view assumes every configured listener is up.
+	active map[int]bool
 }
 
 // SetVersion records the build version string for display in the console.
 func (p *Portal) SetVersion(v string) { p.version = v }
+
+// SetActiveListeners records which configured listener ports actually bound, so
+// the surface view can show a configured-but-not-serving port. Keyed by the port
+// the process binds (Listener.Port), matching what the honeypot logs.
+func (p *Portal) SetActiveListeners(active map[int]bool) { p.active = active }
 
 // New builds a Portal from the loaded config and the shared event logger. It does
 // not bind a port; call Start for that. When the config names a country database,
