@@ -9,7 +9,7 @@ import (
 // The post-login banner must read like a real Ubuntu serial console: the welcome
 // line carries the release exactly once (not "Welcome to Ubuntu Ubuntu ..."), and
 // the stock Ubuntu MOTD header triplet (Documentation/Management/Support) is present
-// — a lone Documentation line is impossible on a real box.
+// - a lone Documentation line is impossible on a real box.
 func TestUbuntuWelcomeAndMOTD(t *testing.T) {
 	h, p := setup(t, "ubuntu")
 	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
@@ -56,7 +56,7 @@ func TestEmptyUsernameRePrompts(t *testing.T) {
 		t.Fatal("never saw login prompt")
 	}
 	// A blank entry must draw a fresh "login:" prompt rather than advancing to the
-	// password (drain it before sending again — the harness pipe is unbuffered).
+	// password (drain it before sending again - the harness pipe is unbuffered).
 	h.SendLine("")
 	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
 		t.Fatal("a blank username did not re-prompt with login:")
@@ -83,7 +83,7 @@ func TestEmptyUsernameRePrompts(t *testing.T) {
 }
 
 // A client that vanishes at the password prompt must not yield a phantom empty
-// CREDENTIAL or a shell — the read failure has to be honored.
+// CREDENTIAL or a shell - the read failure has to be honored.
 func TestPasswordDisconnectLogsNoCredential(t *testing.T) {
 	h, _ := setup(t, "ubuntu")
 	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
@@ -116,7 +116,7 @@ func TestCorrectPasswordIsAccepted(t *testing.T) {
 }
 
 // A wrong password draws "Login incorrect" and re-prompts (login(1) allows three
-// tries), never granting a shell — so telnet and SSH agree on what a wrong password
+// tries), never granting a shell - so telnet and SSH agree on what a wrong password
 // does, and a scanner cannot tell them apart by waving a bad credential through.
 func TestWrongPasswordRePromptsLoginIncorrect(t *testing.T) {
 	h, p := setup(t, "ubuntu")

@@ -7,7 +7,7 @@ import (
 )
 
 // TestLoadOrCreateGeneratesOnFirstRun proves a genuine first run (no file) creates
-// and persists a stable identity that a second call reads back unchanged — so a
+// and persists a stable identity that a second call reads back unchanged - so a
 // restart keeps the same SSH host key, hostname, and secrets.
 func TestLoadOrCreateGeneratesOnFirstRun(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "persona.json")
@@ -47,7 +47,7 @@ func TestLoadOrCreateRegeneratesEmptyFile(t *testing.T) {
 }
 
 // TestLoadOrCreateRefusesToClobberInvalidFile proves a corrupt persona.json is NOT
-// silently regenerated — that would change the host key on restart and break log
+// silently regenerated - that would change the host key on restart and break log
 // correlation. The operator must intervene instead.
 func TestLoadOrCreateRefusesToClobberInvalidFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "persona.json")

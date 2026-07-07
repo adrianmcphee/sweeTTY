@@ -3,7 +3,7 @@ package https_test
 // Bot-fidelity pin for the HTTPS surface. Like SSH, the TLS port deliberately never
 // completes a handshake: it captures the ClientHello and holds the socket open,
 // writing nothing. The machine-observable consequence is an all-zero JARM and an
-// nmap "tcpwrapped" label — a conscious trade (terminating real TLS would expose
+// nmap "tcpwrapped" label - a conscious trade (terminating real TLS would expose
 // Go's own JARM/JA3S, which would not match nginx+OpenSSL anyway). This test pins
 // the zero-bytes-written behaviour so it can never regress into Go's default TLS
 // stack, and confirms the ClientHello is still classified and captured.

@@ -11,7 +11,7 @@ import (
 // TestBuildProtocolWiresEveryConfiguredProtocol proves the startup wiring handles
 // every protocol an instance can be configured with. A missing case returns nil and
 // the listener is silently skipped, so a service the operator configured would just
-// never come up — caught here instead of in production.
+// never come up - caught here instead of in production.
 func TestBuildProtocolWiresEveryConfiguredProtocol(t *testing.T) {
 	p := persona.GenerateProfile("full")
 	base, err := fakehost.Load(p)

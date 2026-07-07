@@ -19,7 +19,7 @@ LDFLAGS    := -s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build run version test adversary vet fmt fmt-check check tidy cover clean release-local hooks
+.PHONY: help build run version test adversary vet fmt fmt-check em-dash-check check tidy cover clean release-local hooks
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -50,7 +50,14 @@ fmt-check: ## Fail if any Go file is not gofmt-clean
 	@out=$$(gofmt -l $(GOFILES)); \
 		if [ -n "$$out" ]; then echo "unformatted:"; echo "$$out"; exit 1; fi
 
-check: fmt-check vet build adversary test ## The gate before committing: fmt-check + vet + build + adversary + test
+em-dash-check: ## Fail if any tracked file contains an em dash (banned in code and docs)
+	@if git grep -nP '\x{2014}' -- ':!*.png' ':!*.jpg' ':!*.gz' >/dev/null 2>&1; then \
+		echo "em dash found (banned; use ASCII punctuation):"; \
+		git grep -nP '\x{2014}' -- ':!*.png' ':!*.jpg' ':!*.gz'; \
+		exit 1; \
+	fi
+
+check: fmt-check em-dash-check vet build adversary test ## The gate before committing: fmt-check + em-dash-check + vet + build + adversary + test
 
 tidy: ## Tidy go.mod / go.sum
 	go mod tidy

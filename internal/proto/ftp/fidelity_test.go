@@ -5,7 +5,7 @@ package ftp_test
 // daemons differ in exactly the places a honeypot-aware client probes: FEAT
 // (Pure-FTPd/ProFTPD advertise MLST, vsftpd does not), pre-login SYST (vsftpd gates
 // it 530, the others answer 215), and the unhandled-command reply (vsftpd and
-// Pure-FTPd answer 530 to everything pre-login — NOT 500 — with their own text,
+// Pure-FTPd answer 530 to everything pre-login - NOT 500 - with their own text,
 // while ProFTPD answers 500 to a genuinely unknown verb). PASS-before-USER is 503.
 
 import (

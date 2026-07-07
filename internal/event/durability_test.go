@@ -28,7 +28,7 @@ func TestLogFileIsNotWorldReadable(t *testing.T) {
 }
 
 // TestLogWriteFailureIsCountedNotSwallowed proves a failed write increments the
-// dropped counter instead of vanishing silently — the log is the product, so a
+// dropped counter instead of vanishing silently - the log is the product, so a
 // lost event must be observable rather than invisible.
 func TestLogWriteFailureIsCountedNotSwallowed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ev.log")

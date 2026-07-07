@@ -229,7 +229,7 @@ func (sh *Shell) cmdCat(args []string) (string, int) {
 		}
 		if sh.isLootImage(abs) {
 			// catting a bait image dumps the colour-ANSI reveal straight to the
-			// terminal — the payoff for whoever followed the trail to the stash.
+			// terminal - the payoff for whoever followed the trail to the stash.
 			b.WriteString(sh.revealForLoot("loot-view", abs, "cat "+f))
 			continue
 		}

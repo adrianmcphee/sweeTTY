@@ -17,7 +17,7 @@ var nasFS embed.FS
 // the loot directory's path is randomized per instance and assembled at load
 // time. The bytes are deliberately innocuous images: an attacker who only ls/stat/
 // file/head's a bait sees a normal photo, and the gag fires the moment they try to
-// actually view or grab one (cat, base64, an ASCII image viewer) — that is what
+// actually view or grab one (cat, base64, an ASCII image viewer) - that is what
 // renders the colour-ANSI payload from internal/shell/reveal.
 //
 //go:embed decoys
@@ -41,7 +41,7 @@ var baitNames = []string{
 //
 // The bait images are not at a fixed location: they are grafted into this
 // instance's randomized, obscure loot directory (persona.LootPath), which the
-// breadcrumb trail — the NAS shell history — leads to. Nothing in the filesystem
+// breadcrumb trail - the NAS shell history - leads to. Nothing in the filesystem
 // reveals the gag; finding the stash takes real work, and viewing what is in it is
 // the payoff. See graftLoot.
 func LoadNAS(p *persona.Persona) (*vfs.FS, error) {

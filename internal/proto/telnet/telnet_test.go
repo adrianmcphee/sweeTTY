@@ -95,7 +95,7 @@ func TestIACNegotiationOnConnect(t *testing.T) {
 	}
 }
 
-// A wrong credential is captured verbatim and marked rejected — the box validates
+// A wrong credential is captured verbatim and marked rejected - the box validates
 // like sshd, but every attempt is still recorded for intelligence.
 func TestCredentialCapture(t *testing.T) {
 	h, _ := setup(t, "ubuntu")
@@ -425,7 +425,7 @@ func TestExitEndsSession(t *testing.T) {
 
 // TestDownloadLandsAndRuns proves the "it's working" download chain: wget
 // completes and the file lands in the overlay (no real fetch, no outbound
-// connection — covered by TestNoOutboundConnectionOrExec), and running the dropped
+// connection - covered by TestNoOutboundConnectionOrExec), and running the dropped
 // file is captured as an exec rather than failing as missing.
 func TestDownloadLandsAndRuns(t *testing.T) {
 	h, p := setup(t, "ubuntu")
@@ -491,7 +491,7 @@ func TestPersistenceSticks(t *testing.T) {
 }
 
 // TestExfilCompletes proves outbound copies appear to succeed (capturing the
-// destination and credential as exfil) while — like every network vector here —
+// destination and credential as exfil) while - like every network vector here -
 // never opening a real connection.
 func TestExfilCompletes(t *testing.T) {
 	h, p := setup(t, "ubuntu")
@@ -534,7 +534,7 @@ func TestExfilCompletes(t *testing.T) {
 // TestPivotToJustinTimberlakeHost is the lateral-movement payoff: sshing to the
 // internal backup host lands on a second fake machine, and the trail there leads
 // to a stash of compelling, exfil-worthy files. No spoiler is visible up front:
-// the open share is clean and nothing names the gag — the loot lives at an
+// the open share is clean and nothing names the gag - the loot lives at an
 // obscure, per-instance path the shell history points to. The pivot credential is
 // captured.
 func TestPivotToJustinTimberlakeHost(t *testing.T) {
@@ -1054,8 +1054,8 @@ func hasLine(out, target string) bool {
 }
 
 // TestApplianceMenuEscapeIsSilentShellTransition checks that on the appliance
-// (IoT) persona the Mirai menu-escape tokens succeed silently — the device's
-// CLI-to-shell transition — and leave a working shell, so a loader proceeds to
+// (IoT) persona the Mirai menu-escape tokens succeed silently - the device's
+// CLI-to-shell transition - and leave a working shell, so a loader proceeds to
 // recon and the payload pull instead of bailing on a bash "command not found".
 func TestApplianceMenuEscapeIsSilentShellTransition(t *testing.T) {
 	p := persona.GenerateProfile("legacy")
@@ -1084,7 +1084,7 @@ func TestApplianceMenuEscapeIsSilentShellTransition(t *testing.T) {
 
 // TestServerMenuEscapeStaysCommandNotFound checks that on a server persona, which
 // is already a bash shell where the IoT menu words are not real commands, the
-// escape tokens stay "command not found" — the coherent response for a real box.
+// escape tokens stay "command not found" - the coherent response for a real box.
 func TestServerMenuEscapeStaysCommandNotFound(t *testing.T) {
 	p := persona.GenerateProfile("full")
 	fs, err := fakehost.Load(p)

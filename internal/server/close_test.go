@@ -10,7 +10,7 @@ import (
 )
 
 // TestServerCloseStopsAccepting proves Close shuts the listener so no new
-// connection is admitted — the primitive a clean SIGTERM shutdown relies on to stop
+// connection is admitted - the primitive a clean SIGTERM shutdown relies on to stop
 // accepting before the process flushes its log and exits.
 func TestServerCloseStopsAccepting(t *testing.T) {
 	lg, err := event.New(filepath.Join(t.TempDir(), "close.log"))

@@ -69,7 +69,7 @@ const (
 // maxExecDepth bounds how deeply a command may re-enter the shell (via `sh -c`,
 // `bash -c`, or a base64-decoded command that runs). Without it a self-referential
 // payload such as `X='sh -c "$X"'; sh -c "$X"` recurses until the goroutine stack
-// overflows — a fatal runtime error that recover() cannot catch and that would take
+// overflows - a fatal runtime error that recover() cannot catch and that would take
 // the whole multi-port sensor down from one telnet session.
 const maxExecDepth = 25
 
@@ -209,7 +209,7 @@ func (sh *Shell) runLine(line string) {
 	}
 	if sh.execDepth >= maxExecDepth {
 		// Bottom out the way a crashed process does, matching the recover() fallback
-		// below — not with a synthetic "maximum nesting level" string, which no real
+		// below - not with a synthetic "maximum nesting level" string, which no real
 		// bash emits for sh -c recursion and which would be a honeypot fingerprint.
 		sh.s.Writeln("Segmentation fault (core dumped)")
 		sh.last = 139
@@ -929,12 +929,12 @@ func (sh *Shell) runCommand(args []string, stdin string) (string, int) {
 	case "enable", "system", "shell", "linuxshell":
 		// Mirai-class loaders fire these "menu escape" tokens the instant they log in,
 		// to break out of a restricted IoT CLI into a raw shell. On the appliance persona
-		// the escape "succeeds" silently — the device-authentic CLI-to-shell transition —
+		// the escape "succeeds" silently - the device-authentic CLI-to-shell transition -
 		// so the loader believes it reached a shell and goes on to its busybox probe,
 		// recon, and payload pull, every step of which we already capture. The token
 		// itself does nothing: no exec, no fetch, no write, no state change; it is the
 		// safest possible builtin. On a server persona, which is already a bash shell and
-		// where these are not real commands, they stay "command not found" — coherent.
+		// where these are not real commands, they stay "command not found" - coherent.
 		if sh.p.IsAppliance() {
 			return "", 0
 		}

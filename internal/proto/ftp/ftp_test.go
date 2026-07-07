@@ -19,7 +19,7 @@ func TestNewNameAndClientFirst(t *testing.T) {
 
 func TestBanner(t *testing.T) {
 	// vsftpd greets with its version in parens; ProFTPD greets with the version,
-	// the ServerName, and the connecting address — never "Server ready.".
+	// the ServerName, and the connecting address - never "Server ready.".
 	vsftpd := &Protocol{persona: &persona.Persona{FTPSoftware: "vsftpd", FTPVer: "3.0.5"}}
 	if got, want := vsftpd.banner(), "220 (vsFTPd 3.0.5)\r\n"; got != want {
 		t.Errorf("vsftpd banner = %q, want %q", got, want)

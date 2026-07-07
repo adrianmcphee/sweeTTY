@@ -100,7 +100,7 @@ type Persona struct {
 	// obscure, alluring, per-instance-random path the breadcrumb trail leads to. It
 	// is randomized so no two deployments share a location a scanner could
 	// fingerprint, and it is threaded (via {{.LootPath}}) through every breadcrumb
-	// — the NAS shell history, the backup script — so the trail stays coherent.
+	// - the NAS shell history, the backup script - so the trail stays coherent.
 	// Nothing about the name hints at what viewing the files actually reveals.
 	LootPath string `json:"loot_path"`
 

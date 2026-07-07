@@ -33,8 +33,8 @@ type droppedRef struct {
 	SHA256   string `json:"sha256"`
 }
 
-// payloads aggregates every DOWNLOAD_ATTEMPT — an attacker's faked wget/curl/tftp
-// of a second-stage payload — into per-source rows plus a distinct-URL roll-up and
+// payloads aggregates every DOWNLOAD_ATTEMPT - an attacker's faked wget/curl/tftp
+// of a second-stage payload - into per-source rows plus a distinct-URL roll-up and
 // headline totals. The captured URLs are the honeypot's highest-value indicator of
 // compromise (the malware staging host and, often, the C2), so this is the page an
 // operator reads to see who is fetching what, and hands to a threat-intel platform.

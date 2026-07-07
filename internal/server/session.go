@@ -387,7 +387,7 @@ func (s *Session) ReadPassword(label string) (string, bool) {
 
 // HoldOpen keeps a tarpit connection open for up to d, but returns as soon as the
 // client disconnects, so the goroutine and file descriptor are freed promptly
-// instead of being pinned for the full hold — the difference between a
+// instead of being pinned for the full hold - the difference between a
 // connect/disconnect storm costing a thread for milliseconds versus minutes. It
 // reads and discards anything the client sends (the protocol has already captured
 // what it needs) and makes the recorded SESSION_END duration the true connection

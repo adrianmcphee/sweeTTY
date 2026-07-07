@@ -34,7 +34,7 @@ func firstResponse(t *testing.T, proto server.Protocol, request string) string {
 // telnet from a SINGLE persona and asserts every advertised version and the host
 // identity come from it. A refactor that made one service read a different field,
 // or pinned a version, desyncs the banners a scan platform correlates and fails
-// here — the property no per-service test can prove on its own.
+// here - the property no per-service test can prove on its own.
 func TestEveryServiceTellsOnePersonaStory(t *testing.T) {
 	p := persona.GenerateProfile("full") // a profile that exposes every service
 

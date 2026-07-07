@@ -171,7 +171,7 @@ func (t *Protocol) Handle(s *server.Session) {
 	// Three strikes: real telnetd drops the connection.
 }
 
-// readUsername prompts like agetty — "<hostname> login: " — until the client
+// readUsername prompts like agetty - "<hostname> login: " - until the client
 // supplies a non-empty login name, re-prompting on a blank entry the way getty does.
 // It returns the trimmed name and false if the client disconnected.
 func (t *Protocol) readUsername(s *server.Session) (string, bool) {

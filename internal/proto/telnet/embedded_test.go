@@ -12,8 +12,8 @@ import (
 
 // The protocol-layer proof for the embedded persona: a real busybox-style telnet
 // session on the legacy (IoT/router) profile must answer every architecture probe
-// as a 64-bit ARM board. This is the path a Mirai-class loader actually walks —
-// log in, fingerprint the CPU, then decide which payload to drop — so a Xeon
+// as a 64-bit ARM board. This is the path a Mirai-class loader actually walks -
+// log in, fingerprint the CPU, then decide which payload to drop - so a Xeon
 // surfacing on any of uname/lscpu/cpuinfo would mark the box as a decoy.
 func TestEmbeddedDeviceSessionIsCoherentlyARM(t *testing.T) {
 	p := persona.GenerateProfile("legacy")

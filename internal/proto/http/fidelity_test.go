@@ -93,7 +93,7 @@ func TestNginxServesExactDefaultIndex(t *testing.T) {
 }
 
 // TestNginxNonGetMethodIs405WithoutAllow proves a non-GET/HEAD method on a static
-// path is 405 — and, crucially, with NO Allow header (Apache sends one; nginx does
+// path is 405 - and, crucially, with NO Allow header (Apache sends one; nginx does
 // not), instead of the old "any method returns 200".
 func TestNginxNonGetMethodIs405WithoutAllow(t *testing.T) {
 	resp := fetch(t, "nginx-static", "POST / HTTP/1.1\r\nHost: x\r\n\r\n")
@@ -111,7 +111,7 @@ func TestNginxNonGetMethodIs405WithoutAllow(t *testing.T) {
 
 // TestWordPressFrontPageHasRestApiLink proves the WordPress front page carries the
 // REST-API discovery Link header (rel="https://api.w.org/") and Vary, after
-// X-Powered-By — the signature a real WP front page always emits and whose absence
+// X-Powered-By - the signature a real WP front page always emits and whose absence
 // (while the body screams WordPress) is a classic mock tell.
 func TestWordPressFrontPageHasRestApiLink(t *testing.T) {
 	lines, _ := headerLines(fetch(t, "wordpress", "GET / HTTP/1.1\r\nHost: x\r\n\r\n"))

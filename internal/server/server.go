@@ -289,8 +289,8 @@ func (srv *Server) handle(conn net.Conn) {
 
 	// Process-wide cap: a botnet across many source IPs defeats the per-IP cap, so
 	// bound total concurrent connections before doing any per-connection work. A
-	// shed connection is logged (rate-limited) so saturation — which blinds capture
-	// across all protocols — is never silent.
+	// shed connection is logged (rate-limited) so saturation - which blinds capture
+	// across all protocols - is never silent.
 	if !globalConns.tryAcquire() {
 		if n, ok := srv.noteShed(); ok {
 			srv.logger.System("connection cap (%d) reached on :%d; shed %d connection(s) recently", maxConns, srv.port, n)

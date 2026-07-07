@@ -246,7 +246,7 @@ func (sh *Shell) iWget(args []string) int {
 	sh.s.Writeln(fmt.Sprintf("Length: %d (%s) [application/octet-stream]", size, humanBytes(size)))
 	if toStdout {
 		// Output "goes to stdout"; in a pipe the next stage consumes it. We emit
-		// nothing and never connect — the download intent is already captured.
+		// nothing and never connect - the download intent is already captured.
 		sh.pause(dur)
 		return 0
 	}
@@ -337,7 +337,7 @@ func (sh *Shell) iSSH(args []string) int {
 			// The pivoted (NAS) shell gets no resolver, so it cannot pivot onward.
 			// Without this single-hop bound an attacker could ssh to the backup host
 			// from the backup host repeatedly, nesting newShell().loop() frames until
-			// the goroutine stack overflows — a fatal crash that bypasses the
+			// the goroutine stack overflows - a fatal crash that bypasses the
 			// per-shell exec-depth guard.
 			nested := newShell(sh.s, piv.FS, piv.P, "root", sh.style, nil)
 			defer nested.fs.Release()
@@ -351,8 +351,8 @@ func (sh *Shell) iSSH(args []string) int {
 	return 255
 }
 
-// iScp simulates a successful scp transfer. It never connects anywhere — every
-// byte of this is local theatre — so an attacker exfiltrating to their own box
+// iScp simulates a successful scp transfer. It never connects anywhere - every
+// byte of this is local theatre - so an attacker exfiltrating to their own box
 // sees it "work" while no data ever leaves, and the destination, credential, and
 // source are captured as exfil intent. The same applies to rsync below; faking
 // success keeps them productive and revealing instead of bailing on a tarpit.
@@ -727,7 +727,7 @@ func (sh *Shell) iCompile(args []string) int {
 }
 
 // iApt fakes a working apt. Installs "succeed" and leave a stub binary in
-// /usr/bin (so which/ls/dpkg stay coherent), updates and upgrades complete — the
+// /usr/bin (so which/ls/dpkg stay coherent), updates and upgrades complete - the
 // box behaves like a healthy, root-owned host so an attacker keeps tooling up and
 // revealing what they reach for. Nothing is fetched; no outbound connection is
 // made.
@@ -872,7 +872,7 @@ func (sh *Shell) iEditor(args []string) int {
 	body, saved := sh.runEditor(target)
 	sh.s.LogCommandNote("editor("+target+"): "+strings.ReplaceAll(body, "\n", "\\n"), "editor-input")
 	// A saved edit to a named, non-system file persists in the overlay, so a later
-	// cat shows it back — the attacker's change "sticks" for the session.
+	// cat shows it back - the attacker's change "sticks" for the session.
 	if saved && target != "file" {
 		if abs := sh.fs.Resolve(target); !inSystemBin(abs) {
 			content := body
@@ -916,7 +916,7 @@ func (sh *Shell) runEditor(target string) (string, bool) {
 }
 
 // iCrontab fakes a working crontab. An install via -e or a file persists in the
-// session, so crontab -l echoes the attacker's entry straight back — their
+// session, so crontab -l echoes the attacker's entry straight back - their
 // persistence "took". It is captured as a high-signal persistence event.
 func (sh *Shell) iCrontab(args []string) int {
 	for i := 1; i < len(args); i++ {

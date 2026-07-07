@@ -21,7 +21,7 @@ func TestSelfReferentialExecDoesNotCrash(t *testing.T) {
 	run(h, `X='sh -c "$X"'`)
 	run(h, `sh -c "$X"`)
 
-	// The session must still be alive and responsive afterwards — if the process
+	// The session must still be alive and responsive afterwards - if the process
 	// had crashed, the harness pipe would be dead and this would read nothing.
 	out := run(h, "echo still-alive")
 	if !strings.Contains(out, "still-alive") {
@@ -32,7 +32,7 @@ func TestSelfReferentialExecDoesNotCrash(t *testing.T) {
 // TestPivotIsSingleHop proves the NAS pivot cannot pivot onward: an attacker who
 // lands on the backup host and then sshes back to it again does not nest another
 // shell. Without the single-hop bound, repeating the pivot would stack newShell().
-// loop() frames until the goroutine stack overflows — a crash that bypasses the
+// loop() frames until the goroutine stack overflows - a crash that bypasses the
 // per-shell exec-depth guard.
 func TestPivotIsSingleHop(t *testing.T) {
 	h, p := setup(t, "ubuntu")

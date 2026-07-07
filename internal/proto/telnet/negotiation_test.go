@@ -98,7 +98,7 @@ func TestUnterminatedSubnegotiationDoesNotHang(t *testing.T) {
 	if _, ok := h.ReadUntil("login:", 2*time.Second); !ok {
 		t.Fatal("never saw login prompt")
 	}
-	// IAC SB followed by a long run with no IAC SE — never terminates.
+	// IAC SB followed by a long run with no IAC SE - never terminates.
 	junk := []byte{0xff, 0xfa} // IAC SB
 	for range 1024 {
 		junk = append(junk, 'A')

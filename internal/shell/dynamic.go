@@ -199,7 +199,7 @@ Swap:     %10d  %10d  %10d
 }
 
 // diskSize pairs the size lsblk prints for a device with the 1K-block count its
-// filesystem reports — the device is always a touch larger than the formatted fs,
+// filesystem reports - the device is always a touch larger than the formatted fs,
 // the way a real mkfs leaves overhead, so df and lsblk agree without being equal.
 type diskSize struct {
 	human  string
@@ -214,7 +214,7 @@ var (
 
 // diskHash derives a stable per-instance seed from the persona, so the disk
 // geometry differs between instances (doctrine #7: two boxes never show identical
-// df/lsblk output) yet is identical on every call within one instance — df, lsblk
+// df/lsblk output) yet is identical on every call within one instance - df, lsblk
 // and the partition table can never disagree.
 func diskHash(p *persona.Persona) uint32 {
 	h := uint32(2166136261)
@@ -238,7 +238,7 @@ func pick3[T any](s []T, h uint32) T { return s[int(h)%len(s)] }
 func dfStr(p *persona.Persona) string {
 	h := diskHash(p)
 	if p.Embedded() {
-		// A single SD card, root only — no Xen data disk on an SBC.
+		// A single SD card, root only - no Xen data disk on an SBC.
 		root := pick3(sdCards, h)
 		ru, ra, rp := usage(root.blocks, h>>3)
 		return fmt.Sprintf(`Filesystem     1K-blocks     Used Available Use%% Mounted on
@@ -517,7 +517,7 @@ tmpfs on /run/lock type tmpfs (rw,nosuid,nodev,noexec,relatime,size=5120k)
 
 func dmesgStr(p *persona.Persona) string {
 	if p.Embedded() {
-		// A bare-metal ARM board boots off a device tree and an SD card — no
+		// A bare-metal ARM board boots off a device tree and an SD card - no
 		// vmlinuz/UUID command line, no Xen, no x86 FPU registers.
 		return `[    0.000000] Linux version ` + p.KernelRel + `
 [    0.000000] Machine model: Generic DT based system

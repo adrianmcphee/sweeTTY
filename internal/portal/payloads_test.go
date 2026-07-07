@@ -29,7 +29,7 @@ func TestPayloadsAggregatesWhoPulledWhat(t *testing.T) {
 		// 8.8.8.8 (US): two distinct payload URLs in one session.
 		`{"time":"2026-06-27T10:00:00Z","event":"DOWNLOAD_ATTEMPT","src_ip":"8.8.8.8","ip":"8.8.8.8:1","session":"s1","port":23,"protocol":"telnet","url":"http://evil/a.sh"}`,
 		`{"time":"2026-06-27T10:00:01Z","event":"DOWNLOAD_ATTEMPT","src_ip":"8.8.8.8","ip":"8.8.8.8:1","session":"s1","port":23,"protocol":"telnet","url":"http://evil/b.bin"}`,
-		// 10.0.0.9 (private): the same URL twice — counts twice, one distinct URL.
+		// 10.0.0.9 (private): the same URL twice - counts twice, one distinct URL.
 		`{"time":"2026-06-27T10:01:00Z","event":"DOWNLOAD_ATTEMPT","src_ip":"10.0.0.9","ip":"10.0.0.9:2","port":80,"protocol":"http","url":"http://evil/a.sh"}`,
 		`{"time":"2026-06-27T10:01:01Z","event":"DOWNLOAD_ATTEMPT","src_ip":"10.0.0.9","ip":"10.0.0.9:2","port":80,"protocol":"http","url":"http://evil/a.sh"}`,
 		// Noise that must never appear on the payloads page.

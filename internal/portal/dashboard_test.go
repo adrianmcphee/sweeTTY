@@ -129,7 +129,7 @@ func TestEventsFeedFreshConnectSkipsExisting(t *testing.T) {
 
 // TestEventsFeedIgnoresUnusableLastEventID exercises the resume guard's fallback:
 // an offset past the end of a rotated/truncated log, a negative value, and
-// non-numeric garbage must all degrade to an end-of-file start — streaming new
+// non-numeric garbage must all degrade to an end-of-file start - streaming new
 // lines without erroring and without replaying the existing backlog.
 func TestEventsFeedIgnoresUnusableLastEventID(t *testing.T) {
 	for _, bad := range []string{"999999", "-5", "abc"} {

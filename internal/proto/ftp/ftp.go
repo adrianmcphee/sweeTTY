@@ -27,7 +27,7 @@ const lockoutDelay = 3 * time.Second
 
 // FEAT lists captured from the real daemons (vsftpd 3.0.x and Pure-FTPd verbatim;
 // ProFTPD from its documented default). They differ enough that one shared list
-// would disqualify a non-vsftpd banner — Pure-FTPd/ProFTPD advertise MLST/MLSD,
+// would disqualify a non-vsftpd banner - Pure-FTPd/ProFTPD advertise MLST/MLSD,
 // which vsftpd does not. The TLS-related lines (AUTH TLS/PBSZ/PROT) are omitted
 // because the tarpit never negotiates TLS, matching the no-[TLS] banner.
 const (
@@ -181,7 +181,7 @@ func (pr *Protocol) feat() string {
 // unhandled returns the reply for a command the tarpit does not service. vsftpd and
 // Pure-FTPd answer 530 to everything pre-login (with their own text); ProFTPD
 // answers 530 to a recognised command but "500 ... not understood" to an unknown
-// verb — the one-packet differentials a honeypot-aware client probes.
+// verb - the one-packet differentials a honeypot-aware client probes.
 func (pr *Protocol) unhandled(cmd string) string {
 	switch pr.software() {
 	case "pure-ftpd":

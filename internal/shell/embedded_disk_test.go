@@ -87,10 +87,10 @@ func TestDiskGeometryVariesPerInstance(t *testing.T) {
 			seenLsblk[lsblkStr(p)] = true
 		}
 		if len(seenDF) < 2 {
-			t.Errorf("%s: df is identical across 16 instances — geometry is not per-instance", profile)
+			t.Errorf("%s: df is identical across 16 instances - geometry is not per-instance", profile)
 		}
 		if len(seenLsblk) < 2 {
-			t.Errorf("%s: lsblk is identical across 16 instances — geometry is not per-instance", profile)
+			t.Errorf("%s: lsblk is identical across 16 instances - geometry is not per-instance", profile)
 		}
 	}
 }

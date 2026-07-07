@@ -233,7 +233,7 @@ type hdr struct{ k, v string }
 // httpHead assembles a response from an explicit ordered header list. Each stack
 // builder below places Date/Server/Content-Type/Content-Length/Connection in its
 // own order; Connection: close and an explicit Content-Length are kept on every
-// stack (one-request-per-connection) as a documented accepted trade — real nginx
+// stack (one-request-per-connection) as a documented accepted trade - real nginx
 // keep-alive and Apache chunked framing are deliberately not reproduced.
 func httpHead(status int, reason string, headers []hdr, body string) string {
 	var b strings.Builder
@@ -377,7 +377,7 @@ func (pr *Protocol) respondWordPress(s *server.Session, srcIP, method, path, bod
 	switch {
 	case route == "/":
 		// The REST-API discovery Link header (rel="https://api.w.org/") is THE
-		// WordPress fingerprint, plus Vary: Accept-Encoding — both present on a real
+		// WordPress fingerprint, plus Vary: Accept-Encoding - both present on a real
 		// WP front page and a tell by their absence.
 		h := withHeader(base, "Link", "<http://"+pr.persona.Hostname+"/index.php?rest_route=/>; rel=\"https://api.w.org/\"")
 		h["Vary"] = "Accept-Encoding"
@@ -403,7 +403,7 @@ func (pr *Protocol) respondWordPress(s *server.Session, srcIP, method, path, bod
 		}
 		// The wp-login signature, captured from a real WordPress: the legacy 1984
 		// Expires, the no-store Cache-Control, the wordpress_test_cookie probe, and
-		// the security headers — the trio scanners key on for the login page.
+		// the security headers - the trio scanners key on for the login page.
 		h := withHeader(base, "Expires", "Wed, 11 Jan 1984 05:00:00 GMT")
 		h["Cache-Control"] = "no-cache, must-revalidate, max-age=0, no-store, private"
 		h["Set-Cookie"] = "wordpress_test_cookie=WP%20Cookie%20check; path=/; HttpOnly"
@@ -762,7 +762,7 @@ func xmlrpcFault() string {
 
 func (pr *Protocol) respondTomcat(method, path string) (string, time.Duration) {
 	// Captured from tomcat:9.0: modern Tomcat sends no Server header, an EMPTY reason
-	// phrase ("HTTP/1.1 404 " — the empty statusText below yields the bare-code
+	// phrase ("HTTP/1.1 404 " - the empty statusText below yields the bare-code
 	// status line, a strong fingerprint), and a lowercase charset=utf-8.
 	base := map[string]string{}
 	const ct = "text/html;charset=utf-8"
@@ -839,12 +839,12 @@ const (
 )
 
 func (pr *Protocol) respondNginx(method, path string) (string, time.Duration) {
-	// nginx — even the Ubuntu/Debian package — emits a bare "nginx/<ver>" Server
+	// nginx - even the Ubuntu/Debian package - emits a bare "nginx/<ver>" Server
 	// header with no distro suffix, matching the token its error pages echo in the
 	// <hr> signature line. (Apache, by contrast, does add "(Ubuntu)".)
 	base := map[string]string{"Server": "nginx/" + pr.persona.NginxVer}
 	if method != "GET" && method != "HEAD" {
-		// A disallowed or unknown method on a static file is 405 — and nginx sends
+		// A disallowed or unknown method on a static file is 405 - and nginx sends
 		// NO Allow header here, a key differential from Apache.
 		return nginxResponse(405, "Not Allowed", "text/html", nginxErrorPage(pr.persona, "405 Not Allowed"), base), 0
 	}
