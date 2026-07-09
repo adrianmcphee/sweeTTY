@@ -27,6 +27,8 @@ const (
 	adbMaxData     = 4096
 	maxADBPayload  = 64 * 1024
 	maxSyncPayload = 1 << 20
+	maxSyncStreams = 16
+	maxSyncBytes   = 4 << 20
 )
 
 type Protocol struct {
@@ -57,6 +59,7 @@ func (pr *Protocol) Handle(s *server.Session) {
 	writePacket(s, cmdCNXN, adbVersion, adbMaxData, []byte(pr.banner()))
 
 	streams := map[uint32]*syncStream{}
+	syncBytes := 0
 	nextServerID := uint32(1)
 	for {
 		pkt, ok := readPacket(s)
@@ -68,14 +71,25 @@ func (pr *Protocol) Handle(s *server.Session) {
 			service := strings.TrimRight(string(pkt.payload), "\x00")
 			serverID := nextServerID
 			nextServerID++
-			writePacket(s, cmdOKAY, serverID, pkt.arg0, nil)
 			switch {
 			case strings.HasPrefix(service, "shell:"):
+				writePacket(s, cmdOKAY, serverID, pkt.arg0, nil)
 				pr.handleShell(s, serverID, pkt.arg0, strings.TrimPrefix(service, "shell:"))
 			case service == "sync:":
+				if streams[pkt.arg0] != nil {
+					s.LogRaw("ADB_MALFORMED", "duplicate sync stream id")
+					writePacket(s, cmdCLSE, 0, pkt.arg0, nil)
+					continue
+				}
+				if len(streams) >= maxSyncStreams {
+					s.LogRaw("ADB_MALFORMED", "too many concurrent sync streams")
+					writePacket(s, cmdCLSE, 0, pkt.arg0, nil)
+					continue
+				}
+				writePacket(s, cmdOKAY, serverID, pkt.arg0, nil)
 				streams[pkt.arg0] = &syncStream{serverID: serverID, clientID: pkt.arg0}
 			default:
-				writePacket(s, cmdCLSE, serverID, pkt.arg0, nil)
+				writePacket(s, cmdCLSE, 0, pkt.arg0, nil)
 			}
 		case cmdWRTE:
 			st := streams[pkt.arg0]
@@ -83,7 +97,21 @@ func (pr *Protocol) Handle(s *server.Session) {
 				writePacket(s, cmdCLSE, pkt.arg1, pkt.arg0, nil)
 				continue
 			}
-			if st.consume(s, pkt.payload) {
+			done, added, err := st.consume(pkt.payload, maxSyncBytes-syncBytes)
+			syncBytes += added
+			if err != nil {
+				s.LogRaw("ADB_MALFORMED", err.Error())
+				syncBytes -= len(st.content)
+				delete(streams, pkt.arg0)
+				writePacket(s, cmdCLSE, st.serverID, st.clientID, nil)
+				continue
+			}
+			if done {
+				if st.path == "" {
+					st.path = "adb-sync-push"
+				}
+				s.LogDropper(st.path, "adb sync push", st.content)
+				syncBytes -= len(st.content)
 				delete(streams, pkt.arg0)
 				writePacket(s, cmdOKAY, st.serverID, st.clientID, nil)
 				writePacket(s, cmdCLSE, st.serverID, st.clientID, nil)
@@ -91,6 +119,9 @@ func (pr *Protocol) Handle(s *server.Session) {
 				writePacket(s, cmdOKAY, st.serverID, st.clientID, nil)
 			}
 		case cmdCLSE:
+			if st := streams[pkt.arg0]; st != nil {
+				syncBytes -= len(st.content)
+			}
 			delete(streams, pkt.arg0)
 		default:
 			s.LogRaw("ADB_MALFORMED", "unexpected "+pkt.command)
@@ -221,7 +252,8 @@ type syncStream struct {
 	content  []byte
 }
 
-func (st *syncStream) consume(s *server.Session, payload []byte) bool {
+func (st *syncStream) consume(payload []byte, remaining int) (bool, int, error) {
+	added := 0
 	for len(payload) >= 8 {
 		id := string(payload[:4])
 		size := binary.LittleEndian.Uint32(payload[4:8])
@@ -229,12 +261,9 @@ func (st *syncStream) consume(s *server.Session, payload []byte) bool {
 		switch id {
 		case "SEND":
 			if size > uint32(len(payload)) {
-				return false
+				return false, added, fmt.Errorf("short sync SEND record")
 			}
 			n := int(size)
-			if len(payload) < n {
-				return false
-			}
 			name := string(payload[:n])
 			payload = payload[n:]
 			if i := strings.LastIndexByte(name, ','); i >= 0 {
@@ -243,31 +272,26 @@ func (st *syncStream) consume(s *server.Session, payload []byte) bool {
 			st.path = name
 		case "DATA":
 			if size > uint32(len(payload)) {
-				return false
+				return false, added, fmt.Errorf("short sync DATA record")
 			}
 			n := int(size)
-			if len(payload) < n {
-				return false
+			if n > maxSyncPayload-len(st.content) {
+				return false, added, fmt.Errorf("sync stream payload exceeds %d bytes", maxSyncPayload)
 			}
-			room := maxSyncPayload - len(st.content)
-			if room > 0 {
-				chunk := payload[:n]
-				if len(chunk) > room {
-					chunk = chunk[:room]
-				}
-				st.content = append(st.content, chunk...)
+			if n > remaining-added {
+				return false, added, fmt.Errorf("aggregate sync payload exceeds %d bytes", maxSyncBytes)
 			}
+			st.content = append(st.content, payload[:n]...)
+			added += n
 			payload = payload[n:]
 		case "DONE":
-			if st.path == "" {
-				st.path = "adb-sync-push"
-			}
-			s.LogDropper(st.path, "adb sync push", st.content)
-			return true
+			return true, added, nil
 		default:
-			s.LogRaw("ADB_MALFORMED", "bad sync record "+id)
-			return false
+			return false, added, fmt.Errorf("bad sync record %s", id)
 		}
 	}
-	return false
+	if len(payload) != 0 {
+		return false, added, fmt.Errorf("short sync record header")
+	}
+	return false, added, nil
 }

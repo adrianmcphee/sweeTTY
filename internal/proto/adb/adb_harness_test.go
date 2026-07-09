@@ -133,6 +133,33 @@ func TestADBSyncPushIsLoggedAsDropperAndHostUntouched(t *testing.T) {
 	}
 }
 
+func TestADBSyncStreamsAndPayloadAreBounded(t *testing.T) {
+	h, _ := setupADB(t)
+	adbHandshake(t, h)
+
+	for id := uint32(1); id <= maxSyncStreams; id++ {
+		adbSend(t, h, "OPEN", id, 0, []byte("sync:\x00"))
+		if pkt := adbRead(t, h); pkt.command != cmdOKAY || pkt.arg1 != id {
+			t.Fatalf("sync OPEN %d response = %+v, want OKAY", id, pkt)
+		}
+	}
+	over := uint32(maxSyncStreams + 1)
+	adbSend(t, h, "OPEN", over, 0, []byte("sync:\x00"))
+	if pkt := adbRead(t, h); pkt.command != cmdCLSE || pkt.arg1 != over {
+		t.Fatalf("sync OPEN beyond cap response = %+v, want CLSE", pkt)
+	}
+
+	st := &syncStream{}
+	tooLarge := make([]byte, maxSyncPayload+1)
+	if _, _, err := st.consume(syncRecord("DATA", tooLarge), maxSyncBytes); err == nil {
+		t.Fatal("sync stream accepted a payload beyond its per-stream cap")
+	}
+	st = &syncStream{}
+	if _, _, err := st.consume(syncRecord("DATA", []byte("overflow")), len("overflow")-1); err == nil {
+		t.Fatal("sync stream accepted a payload beyond the aggregate session budget")
+	}
+}
+
 func TestADBDropsMalformedPacketsWithoutCommandEvents(t *testing.T) {
 	h, _ := setupADB(t)
 
