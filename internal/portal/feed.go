@@ -257,6 +257,8 @@ func (p *Portal) bySession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const maxEventLineBytes = 1 << 20
+
 // events streams new log lines over Server-Sent Events. It opens the log file,
 // every 500ms emits any complete new lines as `log` events, and sends a keep-alive
 // comment when idle. Each event carries an `id:` equal to the byte offset just past
@@ -319,6 +321,8 @@ func (p *Portal) events(w http.ResponseWriter, r *http.Request) {
 	// partial holds the bytes of a line that has been written to disk without its
 	// terminating newline yet, carried across ticks until the line completes.
 	var partial strings.Builder
+	partialBytes := 0
+	partialTooLong := false
 	idleTicks := 0
 	const idlePingEvery = 20 // ~10s of silence between keep-alive pings
 
@@ -330,18 +334,33 @@ func (p *Portal) events(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			wrote := false
 			for {
-				chunk, err := reader.ReadString('\n')
-				if len(chunk) > 0 {
-					partial.WriteString(chunk)
+				chunk, err := reader.ReadSlice('\n')
+				partialBytes += len(chunk)
+				if !partialTooLong {
+					if partial.Len()+len(chunk) > maxEventLineBytes {
+						partialTooLong = true
+						partial.Reset()
+					} else {
+						partial.Write(chunk)
+					}
+				}
+				if err == bufio.ErrBufferFull {
+					continue
 				}
 				if err != nil {
 					// EOF (or short read): keep any partial line for next tick.
 					break
 				}
+				offset += int64(partialBytes)
+				partialBytes = 0
+				if partialTooLong {
+					partialTooLong = false
+					partial.Reset()
+					continue
+				}
 				raw := partial.String()
 				// Advance the resumable offset past this complete line (newline
 				// included) so the id we emit is exactly where a reconnect resumes.
-				offset += int64(len(raw))
 				partial.Reset()
 				line := strings.TrimRight(raw, "\r\n")
 				if line == "" {

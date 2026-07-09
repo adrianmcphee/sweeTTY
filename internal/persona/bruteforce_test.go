@@ -98,3 +98,14 @@ func TestBruteForceSourceTableIsBounded(t *testing.T) {
 		t.Fatal("a new source was let in past the source-table cap; the map is unbounded")
 	}
 }
+
+func TestBruteForceAcceptedCredentialsAreBounded(t *testing.T) {
+	p := Generate()
+	p.SetBruteForce(BruteForceConfig{Enabled: true, AfterTries: 1, After: 0, Probability: 1})
+	for i := range maxAcceptedCredentials + 20 {
+		p.AcceptFrom("192.0.2.9", "root", fmt.Sprintf("guess-%d", i))
+	}
+	if got := len(p.bf.src["192.0.2.9"].accepted); got != maxAcceptedCredentials {
+		t.Fatalf("accepted credential set grew to %d, want cap %d", got, maxAcceptedCredentials)
+	}
+}

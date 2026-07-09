@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const maxRecordings = 2000
+
 // safeID reports whether id is a plain session identifier (the base58 ids the
 // server mints), so it can be used as a filename without any path traversal: no
 // slashes, dots, or other separators are admitted.
@@ -32,6 +34,9 @@ func (p *Portal) recordings(w http.ResponseWriter, _ *http.Request) {
 			for _, e := range ents {
 				if id, ok := strings.CutSuffix(e.Name(), ".cast"); ok && safeID(id) {
 					ids = append(ids, id)
+					if len(ids) >= maxRecordings {
+						break
+					}
 				}
 			}
 		}

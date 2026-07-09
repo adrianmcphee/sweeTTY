@@ -10,6 +10,13 @@ import (
 	"sweetty/internal/event"
 )
 
+const (
+	maxProjectedSources = 4096
+	maxProjectedDetails = 256
+	maxUniqueCommands   = 512
+	maxProjectedAgents  = 256
+)
+
 // store is the portal's incremental read model over the event log. Every
 // dashboard-polled endpoint used to re-read and re-parse the whole log per
 // request; on a busy sensor that is hundreds of megabytes of transient
@@ -68,15 +75,37 @@ func (p *Portal) syncStoreLocked() {
 	}
 
 	reader := bufio.NewReaderSize(f, 256*1024)
+	var line []byte
+	lineBytes := 0
+	lineTooLong := false
 	for {
-		chunk, rerr := reader.ReadBytes('\n')
+		chunk, rerr := reader.ReadSlice('\n')
+		lineBytes += len(chunk)
+		if !lineTooLong {
+			if len(line)+len(chunk) > maxEventLineBytes {
+				lineTooLong = true
+				line = nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if rerr == bufio.ErrBufferFull {
+			continue
+		}
 		if rerr != nil {
 			// EOF with no newline: a line is mid-write. Leave the offset before it
 			// so the next sync re-reads the line once its newline has landed.
 			break
 		}
-		st.offset += int64(len(chunk))
-		st.fold(chunk[:len(chunk)-1], p)
+		st.offset += int64(lineBytes)
+		lineBytes = 0
+		if lineTooLong {
+			lineTooLong = false
+			line = nil
+			continue
+		}
+		st.fold(line[:len(line)-1], p)
+		line = nil
 	}
 }
 
@@ -203,7 +232,9 @@ func (o *overviewProj) fold(e event.Entry, p *Portal) {
 				delete(o.days, oldest)
 			}
 		}
-		d.srcs[src] = true
+		if len(d.srcs) < maxProjectedSources {
+			d.srcs[src] = true
+		}
 		switch e.Event {
 		case "SESSION_START":
 			d.sessions++
@@ -218,6 +249,9 @@ func (o *overviewProj) fold(e event.Entry, p *Portal) {
 
 	row := o.bySrc[src]
 	if row == nil {
+		if len(o.bySrc) >= maxProjectedSources {
+			return
+		}
 		loc := p.geo.Locate(src)
 		row = &overviewSource{IP: src, Country: loc.Country, ASN: loc.ASN, Org: loc.Org, Scope: loc.Scope, FirstSeen: e.Time}
 		o.bySrc[src] = row
@@ -249,15 +283,15 @@ func (o *overviewProj) fold(e event.Entry, p *Portal) {
 
 	row.Events++
 	row.LastSeen = e.Time // entries are chronological, so the last write wins
-	if e.Session != "" && !o.sessSeen[src][e.Session] {
+	if e.Session != "" && len(o.sessSeen[src]) < maxProjectedDetails && !o.sessSeen[src][e.Session] {
 		o.sessSeen[src][e.Session] = true
 		row.Sessions++
 	}
-	if e.Protocol != "" && !o.protoSeen[src][e.Protocol] {
+	if e.Protocol != "" && len(o.protoSeen[src]) < maxProjectedDetails && !o.protoSeen[src][e.Protocol] {
 		o.protoSeen[src][e.Protocol] = true
 		row.Protocols = append(row.Protocols, e.Protocol)
 	}
-	if e.Port > 0 && !o.portSeen[src][e.Port] {
+	if e.Port > 0 && len(o.portSeen[src]) < maxProjectedDetails && !o.portSeen[src][e.Port] {
 		o.portSeen[src][e.Port] = true
 		row.Ports = append(row.Ports, e.Port)
 	}
@@ -283,12 +317,15 @@ func (o *overviewProj) fold(e event.Entry, p *Portal) {
 	if e.UserAgent != "" {
 		ua := o.uaStats[e.UserAgent]
 		if ua == nil {
+			if len(o.uaStats) >= maxProjectedAgents {
+				return
+			}
 			ua = &agentStat{Agent: e.UserAgent}
 			o.uaStats[e.UserAgent] = ua
 			o.uaSrcSeen[e.UserAgent] = map[string]bool{}
 		}
 		ua.Count++
-		if !o.uaSrcSeen[e.UserAgent][src] {
+		if len(o.uaSrcSeen[e.UserAgent]) < maxProjectedDetails && !o.uaSrcSeen[e.UserAgent][src] {
 			o.uaSrcSeen[e.UserAgent][src] = true
 			ua.Sources++
 		}
@@ -329,6 +366,9 @@ func (h *honeytokenProj) fold(e event.Entry, p *Portal) {
 	src := srcOf(e)
 	row := h.bySrc[src]
 	if row == nil {
+		if len(h.bySrc) >= maxProjectedSources {
+			return
+		}
 		loc := p.geo.Locate(src)
 		row = &honeytokenSource{IP: src, Country: loc.Country, Scope: loc.Scope, FirstSeen: e.Time}
 		h.bySrc[src] = row
@@ -338,11 +378,11 @@ func (h *honeytokenProj) fold(e event.Entry, p *Portal) {
 	}
 	row.Count++
 	row.LastSeen = e.Time
-	if e.Session != "" && !h.sessionSeen[src][e.Session] {
+	if e.Session != "" && len(h.sessionSeen[src]) < maxProjectedDetails && !h.sessionSeen[src][e.Session] {
 		h.sessionSeen[src][e.Session] = true
 		row.Sessions = append(row.Sessions, e.Session)
 	}
-	if e.Note != "" && !h.tokenSeen[src][e.Note] {
+	if e.Note != "" && len(h.tokenSeen[src]) < maxProjectedDetails && !h.tokenSeen[src][e.Note] {
 		h.tokenSeen[src][e.Note] = true
 		row.Tokens = append(row.Tokens, e.Note)
 	}
@@ -350,7 +390,9 @@ func (h *honeytokenProj) fold(e event.Entry, p *Portal) {
 	if token == "" {
 		token = "unknown"
 	}
-	h.byToken[token]++
+	if _, ok := h.byToken[token]; ok || len(h.byToken) < maxProjectedDetails {
+		h.byToken[token]++
+	}
 }
 
 // ---- payload projection ------------------------------------------------------
@@ -383,6 +425,9 @@ func (pa *payloadProj) fold(e event.Entry, p *Portal) {
 	src := srcOf(e)
 	row := pa.bySrc[src]
 	if row == nil {
+		if len(pa.bySrc) >= maxProjectedSources {
+			return
+		}
 		loc := p.geo.Locate(src)
 		row = &payloadSource{IP: src, Country: loc.Country, ASN: loc.ASN, Org: loc.Org, Scope: loc.Scope, FirstSeen: e.Time}
 		pa.bySrc[src] = row
@@ -393,7 +438,7 @@ func (pa *payloadProj) fold(e event.Entry, p *Portal) {
 	}
 	row.Count++
 	row.LastSeen = e.Time
-	if e.Session != "" && !pa.sessionSeen[src][e.Session] {
+	if e.Session != "" && len(pa.sessionSeen[src]) < maxProjectedDetails && !pa.sessionSeen[src][e.Session] {
 		pa.sessionSeen[src][e.Session] = true
 		row.Sessions = append(row.Sessions, e.Session)
 	}
@@ -403,19 +448,23 @@ func (pa *payloadProj) fold(e event.Entry, p *Portal) {
 		if key == "" {
 			key = e.Filename
 		}
-		pa.bySha[key]++
-		if !pa.dropSeen[src][key] {
+		if _, ok := pa.bySha[key]; ok || len(pa.bySha) < maxProjectedDetails {
+			pa.bySha[key]++
+		}
+		if len(pa.dropSeen[src]) < maxProjectedDetails && !pa.dropSeen[src][key] {
 			pa.dropSeen[src][key] = true
 			row.Droppers = append(row.Droppers, droppedRef{Filename: e.Filename, SHA256: e.SHA256})
 		}
 		return
 	}
 	url := payloadURL(e)
-	if !pa.urlSeen[src][url] {
+	if len(pa.urlSeen[src]) < maxProjectedDetails && !pa.urlSeen[src][url] {
 		pa.urlSeen[src][url] = true
 		row.URLs = append(row.URLs, url)
 	}
-	pa.byURL[url]++
+	if _, ok := pa.byURL[url]; ok || len(pa.byURL) < maxProjectedDetails {
+		pa.byURL[url]++
+	}
 }
 
 // ---- live-session projection ---------------------------------------------------

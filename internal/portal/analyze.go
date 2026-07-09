@@ -100,7 +100,7 @@ func (s *sourceSignals) observe(e event.Entry) {
 		if s.seen == nil {
 			s.seen = map[string]bool{}
 		}
-		if !s.seen[e.Command] {
+		if len(s.seen) < maxUniqueCommands && !s.seen[e.Command] {
 			s.seen[e.Command] = true
 			s.uniqueCmds++
 		}
@@ -240,7 +240,9 @@ type sourceAnalyzer struct {
 func (a *sourceAnalyzer) observe(e event.Entry) {
 	ms := entryMs(e)
 	if !a.seenAny || (a.prevMs != 0 && ms != 0 && ms-a.prevMs > visitGapMs) {
-		a.visits = append(a.visits, Visit{Start: e.Time})
+		if len(a.visits) < maxProjectedDetails {
+			a.visits = append(a.visits, Visit{Start: e.Time})
+		}
 	}
 	a.seenAny = true
 	cur := &a.visits[len(a.visits)-1]

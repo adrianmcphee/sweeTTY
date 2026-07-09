@@ -1173,7 +1173,8 @@ function setConn(up){var c=document.getElementById('conn');c.classList.toggle('d
 // a pending coalesced refresh. knownIPs is every source seen so a genuinely new
 // one can be called out; hydrated gates that callout past the initial load so the
 // first 200 history rows do not each fire a "new source" toast.
-var detailIP=null,detailT=0,knownIPs={},hydrated=false;
+var detailIP=null,detailT=0,knownIPs={},knownIPOrder=[],hydrated=false;
+function rememberIP(s){if(!s||knownIPs[s])return;knownIPs[s]=true;knownIPOrder.push(s);if(knownIPOrder.length>4096){delete knownIPs[knownIPOrder.shift()];}}
 // suppressNotify mutes the alarms (toasts, sound, confetti) while a reconnect
 // backfills the events missed during the gap, so a brief blip cannot storm them.
 var suppressNotify=false,sseStarted=false,suppressT=0;
@@ -1214,7 +1215,7 @@ setTimeout(dismiss,o.prize?9000:6000);
 function notify(e){
 var s=srcOf(e);
 var fresh=s&&!knownIPs[s];
-if(fresh)knownIPs[s]=true;
+if(fresh)rememberIP(s);
 // Keep the new-source bookkeeping above even for a backfilled burst, but mute
 // the alarms below so a reconnect cannot replay them as a storm.
 if(suppressNotify)return;
@@ -1340,7 +1341,7 @@ confRAF=0;confP=[];cctx.clearRect(0,0,confCanvas.width,confCanvas.height);confCa
 function load(){
 fetch('/dashboard/log?limit=200',{credentials:'same-origin'})
 .then(function(r){return r.json();})
-.then(function(d){entries=d.entries||[];for(var i=0;i<entries.length;i++){var s=srcOf(entries[i]);if(s)knownIPs[s]=true;}renderFeed();computeStats();if(curView==='sources')renderSources();})
+.then(function(d){entries=d.entries||[];for(var i=0;i<entries.length;i++){var s=srcOf(entries[i]);if(s)rememberIP(s);}renderFeed();computeStats();if(curView==='sources')renderSources();})
 .catch(function(){});
 }
 function connect(){

@@ -97,6 +97,7 @@ network, executing attacker input, or writing to the host disk.
 - **A hold-open tarpit releases its goroutine and fd on disconnect, and returns immediately in fast mode**. _internal/server: TestHoldOpenReleasesOnDisconnect, TestHoldOpenFastModeReturnsImmediately_
 - **A process-wide connection cap backstops the per-IP cap**. _internal/server: TestConnLimiterCapsConcurrency_
 - **ReadLine, aggregate HTTP/Docker/Redis request memory, and the HTTP header loop are length-bounded**. _internal/server: TestReadLineIsBounded, TestInputBudgetReleasesAndEnforcesBothCaps; internal/proto/http: TestHTTPHeaderFloodIsBounded, TestHTTPHeaderBytesAreBounded_
+- **Portal projections, source classifiers, replay listings, and browser source bookkeeping cap attacker-controlled cardinality; oversized live-feed lines are discarded without unbounded buffering**. _internal/portal: TestPortalProjectionsBoundAttackerCardinality, TestSourceAnalyzerVisitsAreBounded_
 - **A handler panic ends only its session; SESSION_END still fires**. _internal/server: TestSessionEndSurvivesPanic_
 - **Hostile input does not hang or crash a handler**: unterminated subnegotiation, self-referential `sh -c`, base64-decoded command, repeated pivot. _internal/proto/telnet: TestUnterminatedSubnegotiationDoesNotHang, TestSelfReferentialExecDoesNotCrash, TestBase64DecodedCommandDoesNotCrash, TestPivotIsSingleHop_
 - **Progress bars advance over a fixed duration**. _internal/server: TestProgressBar_

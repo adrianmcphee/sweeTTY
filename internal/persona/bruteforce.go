@@ -38,6 +38,7 @@ type srcAuth struct {
 // lifetime and eventually OOMs a long-lived sensor. At the cap new sources stop
 // being tracked (they simply never crack in) rather than growing memory without end.
 const maxBruteSources = 50000
+const maxAcceptedCredentials = 64
 
 func credKey(user, pass string) string { return user + "\x00" + pass }
 
@@ -66,7 +67,9 @@ func (b *bruteForce) consider(srcIP, user, pass string) bool {
 		st.first = time.Now()
 	}
 	if st.tries >= b.cfg.AfterTries && time.Since(st.first) >= b.cfg.After && mrand.Float64() < b.cfg.Probability {
-		st.accepted[key] = struct{}{}
+		if len(st.accepted) < maxAcceptedCredentials {
+			st.accepted[key] = struct{}{}
+		}
 		return true
 	}
 	return false

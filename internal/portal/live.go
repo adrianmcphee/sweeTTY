@@ -43,6 +43,9 @@ func (p *Portal) recordedSet() map[string]bool {
 	for _, e := range ents {
 		if id, ok := strings.CutSuffix(e.Name(), ".cast"); ok && safeID(id) {
 			set[id] = true
+			if len(set) >= maxRecordings {
+				break
+			}
 		}
 	}
 	return set
