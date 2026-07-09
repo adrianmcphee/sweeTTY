@@ -2,15 +2,17 @@
 // file, so an operator can replay exactly what an attacker saw. It records only
 // output the honeypot itself produced, to an operator-configured directory; it
 // is the same category of telemetry as the JSON event log, written to a path the
-// operator chose, never to an attacker-controlled path. Recording is off unless
-// a directory is configured.
+// operator chose, never to an attacker-controlled path. Recording is opt-in and
+// is disabled unless the configuration explicitly enables it.
 package record
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,8 +22,85 @@ import (
 // write an unbounded file, and once the disk fills the event log itself starts
 // dropping writes, blinding the sensor it exists to feed. Retention and file count
 // are the deployment's job (the instance template ages casts out); this bounds the
-// one-session runaway.
-const maxCastBytes = 16 << 20
+// one-session runaway. Directory-wide limits provide a second line of defence.
+const (
+	maxCastBytes    int64 = 16 << 20
+	maxCastFiles          = 4096
+	maxCastDirBytes int64 = 1 << 30
+)
+
+type dirQuota struct {
+	mu    sync.Mutex
+	init  bool
+	files int
+	bytes int64
+}
+
+var quotaState struct {
+	sync.Mutex
+	byDir map[string]*dirQuota
+}
+
+func quotaFor(dir string) *dirQuota {
+	clean := filepath.Clean(dir)
+	quotaState.Lock()
+	defer quotaState.Unlock()
+	if quotaState.byDir == nil {
+		quotaState.byDir = map[string]*dirQuota{}
+	}
+	q := quotaState.byDir[clean]
+	if q == nil {
+		q = &dirQuota{}
+		quotaState.byDir[clean] = q
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.init {
+		if ents, err := os.ReadDir(clean); err == nil {
+			for _, e := range ents {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".cast") {
+					continue
+				}
+				if fi, err := e.Info(); err == nil {
+					q.files++
+					q.bytes += fi.Size()
+				}
+			}
+		}
+		q.init = true
+	}
+	return q
+}
+
+func (q *dirQuota) reserveFile(bytes int64) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.files >= maxCastFiles || bytes > maxCastDirBytes-q.bytes {
+		return false
+	}
+	q.files++
+	q.bytes += bytes
+	return true
+}
+
+func (q *dirQuota) reserveBytes(bytes int64) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if bytes < 0 || bytes > maxCastDirBytes-q.bytes {
+		return false
+	}
+	q.bytes += bytes
+	return true
+}
+
+func (q *dirQuota) releaseBytes(bytes int64) {
+	if bytes <= 0 {
+		return
+	}
+	q.mu.Lock()
+	q.bytes -= bytes
+	q.mu.Unlock()
+}
 
 // Recorder appends asciinema v2 events for one session. The zero value and a nil
 // Recorder are safe no-ops, so callers need not branch on whether recording is
@@ -29,8 +108,9 @@ const maxCastBytes = 16 << 20
 type Recorder struct {
 	mu      sync.Mutex
 	f       *os.File
+	quota   *dirQuota
 	start   time.Time
-	written int
+	written int64
 	capped  bool
 }
 
@@ -38,10 +118,14 @@ type Recorder struct {
 // if absent with owner-only permissions. A returned error means recording could
 // not start; the caller should carry on without a recorder.
 func New(dir, id string, width, height int) (*Recorder, error) {
+	if !validID(id) {
+		return nil, fmt.Errorf("invalid recording id")
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, id+".cast"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	path := filepath.Join(dir, id+".cast")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +136,27 @@ func New(dir, id string, width, height int) (*Recorder, error) {
 		"height":    height,
 		"timestamp": now.Unix(),
 	})
-	if _, err := f.Write(append(hdr, '\n')); err != nil {
+	header := append(hdr, '\n')
+	q := quotaFor(dir)
+	if !q.reserveFile(int64(len(header))) {
 		f.Close()
+		os.Remove(path)
+		return nil, fmt.Errorf("recording directory quota exceeded")
+	}
+	n, err := f.Write(header)
+	if err != nil || n != len(header) {
+		q.releaseBytes(int64(n))
+		q.mu.Lock()
+		q.files--
+		q.mu.Unlock()
+		f.Close()
+		os.Remove(path)
+		if err == nil {
+			err = os.ErrInvalid
+		}
 		return nil, err
 	}
-	return &Recorder{f: f, start: now}, nil
+	return &Recorder{f: f, quota: q, start: now, written: int64(len(header))}, nil
 }
 
 // Write appends one output event carrying b at the current offset from the start
@@ -84,14 +184,41 @@ func (r *Recorder) event(kind byte, b []byte) {
 	}
 	off := strconv.FormatFloat(time.Since(r.start).Seconds(), 'f', 6, 64)
 	line := "[" + off + ", \"" + string(kind) + "\", " + string(data) + "]\n"
-	if r.written+len(line) > maxCastBytes {
+	if r.written+int64(len(line)) > maxCastBytes {
 		// One last marker so a truncated replay is self-explanatory, then stop.
-		r.f.WriteString("[" + off + ", \"o\", \"\\r\\n[recording truncated]\\r\\n\"]\n")
+		marker := "[" + off + ", \"o\", \"\\r\\n[recording truncated]\\r\\n\"]\n"
+		if r.written+int64(len(marker)) <= maxCastBytes && r.quota.reserveBytes(int64(len(marker))) {
+			if n, _ := r.f.WriteString(marker); n != len(marker) {
+				r.quota.releaseBytes(int64(len(marker) - n))
+			}
+		}
 		r.capped = true
 		return
 	}
-	n, _ := r.f.WriteString(line)
-	r.written += n
+	if !r.quota.reserveBytes(int64(len(line))) {
+		r.capped = true
+		return
+	}
+	n, err := r.f.WriteString(line)
+	if n < len(line) {
+		r.quota.releaseBytes(int64(len(line) - n))
+	}
+	r.written += int64(n)
+	if err != nil || n != len(line) {
+		r.capped = true
+	}
+}
+
+func validID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, c := range id {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // Close flushes and closes the cast file. It is safe on a nil Recorder.

@@ -88,6 +88,31 @@ func TestNilRecorderIsSafe(t *testing.T) {
 	}
 }
 
+func TestRecorderRejectsUnsafeAndDuplicateIDs(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := New(dir, "../escape", 80, 24); err == nil {
+		t.Fatal("recording accepted a path-traversal id")
+	}
+	r, err := New(dir, "same", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if _, err := New(dir, "same", 80, 24); err == nil {
+		t.Fatal("recording silently replaced an existing cast")
+	}
+}
+
+func TestDirectoryQuotaAccountingIsBounded(t *testing.T) {
+	q := &dirQuota{files: maxCastFiles - 1, bytes: maxCastDirBytes - 4}
+	if !q.reserveFile(4) || q.reserveFile(1) {
+		t.Fatal("directory quota admitted an over-cap file")
+	}
+	if q.reserveBytes(1) {
+		t.Fatal("directory quota admitted bytes beyond its cap")
+	}
+}
+
 // TestCastSizeIsCapped proves one session cannot write an unbounded cast file. A
 // runaway session that elicits huge output would otherwise fill the disk, at which
 // point the JSON event log itself starts dropping writes and the sensor goes blind.
@@ -98,7 +123,7 @@ func TestCastSizeIsCapped(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	chunk := make([]byte, 1<<20)
-	for range (maxCastBytes / len(chunk)) + 8 {
+	for range int(maxCastBytes/int64(len(chunk))) + 8 {
 		r.Write(chunk)
 	}
 	if err := r.Close(); err != nil {

@@ -156,7 +156,7 @@ network, executing attacker input, or writing to the host disk.
 
 ## Session recording and replay
 
-- **Each session can be recorded as a valid asciinema v2 cast** when `record_dir` is set; a nil recorder is a no-op. _internal/record: TestCastIsValidAsciinema, TestNilRecorderIsSafe; internal/server: TestSessionRecordingWritesCast_
+- **Session recording is opt-in (`record: true`) and each cast plus the recording directory has storage quotas; ids cannot escape the recording directory and a nil recorder is a no-op**. _internal/config: TestRecordingDefaultsOff; internal/record: TestCastIsValidAsciinema, TestNilRecorderIsSafe, TestRecorderRejectsUnsafeAndDuplicateIDs, TestDirectoryQuotaAccountingIsBounded; internal/server: TestSessionRecordingWritesCast_
 - **A recorded cast is served by id; a bad id is rejected**. _internal/portal: TestCastServesRecording, TestCastRejectsBadID_
 
 ## Portal (VISION §6)

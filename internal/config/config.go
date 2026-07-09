@@ -26,8 +26,8 @@ type Config struct {
 	PortalBind        string         `json:"portal_bind,omitempty"`         // host the portal binds; default 127.0.0.1, reached via an SSH tunnel. Set 0.0.0.0 to expose it directly (no application auth, so only behind a trusted boundary)
 	GeoIPFile         string         `json:"geoip_file,omitempty"`          // optional operator IP-to-country CSV, read only by the portal
 	AsnFile           string         `json:"asn_file,omitempty"`            // optional operator IP-to-ASN CSV (start,end,asn,org), read only by the portal, surfaces the ISP / hosting provider
-	RecordDir         string         `json:"record_dir,omitempty"`          // directory for per-session asciinema cast recordings; empty means the default "recordings" (relative to the working directory) when recording is on
-	Record            *bool          `json:"record,omitempty"`              // session recording toggle; on by default (so watch and replay work out of the box), set false to disable
+	RecordDir         string         `json:"record_dir,omitempty"`          // directory for per-session asciinema cast recordings; empty means disabled unless record is true
+	Record            *bool          `json:"record,omitempty"`              // session recording toggle; off by default, set true to enable
 	PersonaFile       string         `json:"persona_file,omitempty"`        // where the generated per-instance identity is persisted; empty means persona.json beside the config. Point it at a honeypot-writable path when the config dir is read-only (the hardened deployment), since the persona is written by the honeypot, not the operator
 	BruteForce        BruteForce     `json:"bruteforce,omitzero"`           // optional "let a persistent guesser in" policy; off by default
 	AdminConsoles     []AdminConsole `json:"admin_consoles,omitempty"`      // operator consoles reverse-proxied through the portal, reached over the same SSH tunnel
@@ -157,13 +157,13 @@ func Load(path string) (Config, error) {
 	if len(cfg.Listeners) == 0 {
 		cfg.Listeners = DefaultConfig().Listeners
 	}
-	// Session recording is on by default so watch and replay work out of the box; a
-	// config turns it off with "record": false. Resolve the effective directory here
+	// Session recording is opt-in so a first run cannot fill the disk with casts; set
+	// "record": true (and optionally record_dir) to enable it. Resolve the effective directory here
 	// so every consumer (the server and the portal) reads it from RecordDir directly.
-	if cfg.Record != nil && !*cfg.Record {
-		cfg.RecordDir = "" // explicitly disabled
+	if cfg.Record == nil || !*cfg.Record {
+		cfg.RecordDir = "" // explicitly disabled, including the default
 	} else if cfg.RecordDir == "" {
-		cfg.RecordDir = "recordings" // default on, relative to the working directory
+		cfg.RecordDir = "recordings" // opt-in default, relative to the working directory
 	}
 	return cfg, nil
 }
