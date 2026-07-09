@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	defaultDir        = "/var/lib/redis"
-	defaultDBFilename = "dump.rdb"
-	maxRedisArgs      = 64
-	maxRedisBulk      = 64 * 1024
+	defaultDir           = "/var/lib/redis"
+	defaultDBFilename    = "dump.rdb"
+	maxRedisArgs         = 64
+	maxRedisBulk         = 64 * 1024
+	maxRedisCommandBytes = 512 * 1024
 )
 
 type Protocol struct {
@@ -39,41 +40,50 @@ func (pr *Protocol) Handle(s *server.Session) {
 	state := redisState{dir: defaultDir, dbfilename: defaultDBFilename}
 
 	for {
-		args, ok := readCommand(s)
-		if !ok {
+		if !pr.handleCommand(s, &state) {
 			return
-		}
-		if len(args) == 0 {
-			continue
-		}
-		cmd := strings.ToUpper(args[0])
-		s.LogCommand(commandLine(args))
-		switch cmd {
-		case "PING":
-			if len(args) > 1 {
-				writeBulk(s, args[1])
-			} else {
-				writeSimple(s, "PONG")
-			}
-		case "INFO":
-			writeBulk(s, pr.info())
-		case "CONFIG":
-			handleConfig(s, &state, args)
-		case "AUTH":
-			handleAuth(s, args)
-		case "SELECT":
-			writeSimple(s, "OK")
-		case "SET":
-			handleSet(s, &state, args)
-		case "SAVE", "BGSAVE":
-			handleSave(s, &state)
-		case "QUIT":
-			writeSimple(s, "OK")
-			return
-		default:
-			writeError(s, "ERR unknown command '"+args[0]+"'")
 		}
 	}
+}
+
+func (pr *Protocol) handleCommand(s *server.Session, state *redisState) bool {
+	budget := server.NewInputBudget(maxRedisCommandBytes)
+	defer budget.Release()
+	args, ok := readCommand(s, budget)
+	if !ok {
+		return false
+	}
+	if len(args) == 0 {
+		return true
+	}
+	cmd := strings.ToUpper(args[0])
+	s.LogCommand(commandLine(args))
+	switch cmd {
+	case "PING":
+		if len(args) > 1 {
+			writeBulk(s, args[1])
+		} else {
+			writeSimple(s, "PONG")
+		}
+	case "INFO":
+		writeBulk(s, pr.info())
+	case "CONFIG":
+		handleConfig(s, state, args)
+	case "AUTH":
+		handleAuth(s, args)
+	case "SELECT":
+		writeSimple(s, "OK")
+	case "SET":
+		handleSet(s, state, args)
+	case "SAVE", "BGSAVE":
+		handleSave(s, state)
+	case "QUIT":
+		writeSimple(s, "OK")
+		return false
+	default:
+		writeError(s, "ERR unknown command '"+args[0]+"'")
+	}
+	return true
 }
 
 type redisState struct {
@@ -200,13 +210,17 @@ func redisTarget(dir, filename string) string {
 	return dir + "/" + filename
 }
 
-func readCommand(s *server.Session) ([]string, bool) {
+func readCommand(s *server.Session, budget *server.InputBudget) ([]string, bool) {
 	line, ok := s.ReadLine()
 	if !ok {
 		return nil, false
 	}
 	if line == "" {
 		return nil, true
+	}
+	if !budget.Reserve(len(line)) {
+		malformed(s, "command exceeds memory budget")
+		return nil, false
 	}
 	if !strings.HasPrefix(line, "*") {
 		return strings.Fields(line), true
@@ -226,9 +240,17 @@ func readCommand(s *server.Session) ([]string, bool) {
 			malformed(s, "expected bulk string, got "+bulkHeader)
 			return nil, false
 		}
+		if !budget.Reserve(len(bulkHeader)) {
+			malformed(s, "command exceeds memory budget")
+			return nil, false
+		}
 		n, err := strconv.Atoi(strings.TrimPrefix(bulkHeader, "$"))
 		if err != nil || n < 0 || n > maxRedisBulk {
 			malformed(s, "bad bulk length "+bulkHeader)
+			return nil, false
+		}
+		if !budget.Reserve(n + 2) {
+			malformed(s, "command exceeds memory budget")
 			return nil, false
 		}
 		raw := s.ReadN(n + 2)

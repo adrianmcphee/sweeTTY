@@ -36,6 +36,8 @@ const (
 	xmlrpcPostDelay  = 2 * time.Second
 	notFoundDelay    = 500 * time.Millisecond
 	managerAuthDelay = 2 * time.Second
+	maxHeaderBytes   = 128 * 1024
+	maxRequestBytes  = 256 * 1024
 )
 
 // maxBodyBytes caps how much of a POST body is read and stored, so a large
@@ -103,9 +105,15 @@ func (pr *Protocol) ClientFirst() bool { return true }
 // Connection: close, so the connection ends after one exchange.
 func (pr *Protocol) Handle(s *server.Session) {
 	s.Persona = pr.persona
+	budget := server.NewInputBudget(maxRequestBytes)
+	defer budget.Release()
 
 	requestLine, ok := s.ReadLine()
 	if requestLine == "" && !ok {
+		return
+	}
+	if !budget.Reserve(len(requestLine)) {
+		writeRequestTooLarge(s)
 		return
 	}
 	method, path := parseRequestLine(requestLine)
@@ -113,10 +121,17 @@ func (pr *Protocol) Handle(s *server.Session) {
 	// Bound the header block: an attacker can otherwise stream headers forever,
 	// growing the map until the process OOMs. A real client sends a few dozen.
 	headers := make(map[string]string)
+	headerBytes := 0
 	for range maxHeaders {
 		line, lok := s.ReadLine()
 		if line == "" {
 			break // blank line terminates the header block
+		}
+		headerBytes += len(line)
+		if headerBytes > maxHeaderBytes || !budget.Reserve(len(line)) {
+			s.LogRaw("HTTP_MALFORMED", "request headers exceed memory budget")
+			writeRequestTooLarge(s)
+			return
 		}
 		if k, v, found := splitHeader(line); found {
 			headers[strings.ToLower(k)] = v
@@ -129,7 +144,15 @@ func (pr *Protocol) Handle(s *server.Session) {
 
 	var body string
 	if method == "POST" {
-		body = readBody(s, atoiSafe(headers["content-length"]))
+		bodyLen := atoiSafe(headers["content-length"])
+		if bodyLen > maxBodyBytes {
+			bodyLen = maxBodyBytes
+		}
+		if !budget.Reserve(bodyLen) {
+			writeRequestTooLarge(s)
+			return
+		}
+		body = readBody(s, bodyLen)
 		sum := sha256.Sum256([]byte(body))
 		s.LogHTTPPost(path, body, hex.EncodeToString(sum[:]))
 	}
@@ -202,6 +225,10 @@ func readBody(s *server.Session, contentLength int) string {
 		contentLength = maxBodyBytes
 	}
 	return string(s.ReadN(contentLength))
+}
+
+func writeRequestTooLarge(s *server.Session) {
+	s.Write("HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
 }
 
 // pathOnly strips the query string and fragment from a request target.

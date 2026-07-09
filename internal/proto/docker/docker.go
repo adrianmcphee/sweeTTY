@@ -14,7 +14,12 @@ import (
 	"sweetty/internal/server"
 )
 
-const maxHeaders = 64
+const (
+	maxHeaders      = 64
+	maxHeaderBytes  = 128 * 1024
+	maxRequestBytes = 2 * 1024 * 1024
+	maxBodyBytes    = 1 << 20
+)
 
 type Protocol struct {
 	persona *persona.Persona
@@ -31,21 +36,44 @@ func (pr *Protocol) ClientFirst() bool { return true }
 func (pr *Protocol) Handle(s *server.Session) {
 	s.Persona = pr.persona
 	for {
+		budget := server.NewInputBudget(maxRequestBytes)
 		requestLine, ok := s.ReadLine()
 		if !ok && requestLine == "" {
+			budget.Release()
+			return
+		}
+		if !budget.Reserve(len(requestLine)) {
+			budget.Release()
+			pr.writeText(s, 431, "Request Header Fields Too Large", "")
 			return
 		}
 		method, target, valid := parseRequestLine(requestLine)
 		if !valid {
+			budget.Release()
 			pr.writeText(s, 400, "Bad Request", "Bad Request\n")
 			return
 		}
-		headers := readHeaders(s)
+		headers, headersOK := readHeaders(s, budget)
+		if !headersOK {
+			budget.Release()
+			pr.writeText(s, 431, "Request Header Fields Too Large", "")
+			return
+		}
 		body := ""
 		if method == "POST" {
-			body = string(s.ReadN(atoiSafe(headers["content-length"])))
+			bodyLen := atoiSafe(headers["content-length"])
+			if bodyLen > maxBodyBytes {
+				bodyLen = maxBodyBytes
+			}
+			if !budget.Reserve(bodyLen) {
+				budget.Release()
+				pr.writeText(s, 413, "Payload Too Large", "")
+				return
+			}
+			body = string(s.ReadN(bodyLen))
 		}
 		pr.respond(s, method, target, body)
+		budget.Release()
 		if strings.EqualFold(headers["connection"], "close") {
 			return
 		}
@@ -150,12 +178,17 @@ func parseRequestLine(line string) (method, target string, ok bool) {
 	return strings.ToUpper(fields[0]), fields[1], true
 }
 
-func readHeaders(s *server.Session) map[string]string {
+func readHeaders(s *server.Session, budget *server.InputBudget) (map[string]string, bool) {
 	headers := map[string]string{}
+	headerBytes := 0
 	for range maxHeaders {
 		line, ok := s.ReadLine()
 		if line == "" {
 			break
+		}
+		headerBytes += len(line)
+		if headerBytes > maxHeaderBytes || !budget.Reserve(len(line)) {
+			return nil, false
 		}
 		if i := strings.IndexByte(line, ':'); i >= 0 {
 			headers[strings.ToLower(strings.TrimSpace(line[:i]))] = strings.TrimSpace(line[i+1:])
@@ -164,7 +197,7 @@ func readHeaders(s *server.Session) map[string]string {
 			break
 		}
 	}
-	return headers
+	return headers, true
 }
 
 func atoiSafe(s string) int {

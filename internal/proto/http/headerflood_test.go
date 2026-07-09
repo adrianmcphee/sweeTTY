@@ -38,3 +38,21 @@ func TestHTTPHeaderFloodIsBounded(t *testing.T) {
 		t.Fatalf("server did not respond to a header flood (unbounded read): %q", resp)
 	}
 }
+
+func TestHTTPHeaderBytesAreBounded(t *testing.T) {
+	h, err := testharness.New(httpproto.New(nil, persona.Generate(), "nginx-static"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\n")
+	b.WriteString("X-Pad: " + strings.Repeat("a", 70000) + "\r\n")
+	b.WriteString("X-Pad: " + strings.Repeat("b", 70000) + "\r\n\r\n")
+	go h.Send(b.String())
+	resp, ok := h.ReadUntil("HTTP/1.1", 3*time.Second)
+	if !ok || !strings.HasPrefix(resp, "HTTP/1.1 431") {
+		t.Fatalf("oversized header bytes were not rejected: %q", resp)
+	}
+}
