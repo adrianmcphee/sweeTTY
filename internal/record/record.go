@@ -124,6 +124,7 @@ func New(dir, id string, width, height int) (*Recorder, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	q := quotaFor(dir)
 	path := filepath.Join(dir, id+".cast")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -137,7 +138,6 @@ func New(dir, id string, width, height int) (*Recorder, error) {
 		"timestamp": now.Unix(),
 	})
 	header := append(hdr, '\n')
-	q := quotaFor(dir)
 	if !q.reserveFile(int64(len(header))) {
 		f.Close()
 		os.Remove(path)

@@ -113,6 +113,22 @@ func TestDirectoryQuotaAccountingIsBounded(t *testing.T) {
 	}
 }
 
+func TestNewCountsEachCastOnceAgainstDirectoryQuota(t *testing.T) {
+	dir := t.TempDir()
+	r, err := New(dir, "one", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	q := quotaFor(dir)
+	q.mu.Lock()
+	files := q.files
+	q.mu.Unlock()
+	if files != 1 {
+		t.Fatalf("directory quota counted %d files after one cast, want 1", files)
+	}
+}
+
 // TestCastSizeIsCapped proves one session cannot write an unbounded cast file. A
 // runaway session that elicits huge output would otherwise fill the disk, at which
 // point the JSON event log itself starts dropping writes and the sensor goes blind.
