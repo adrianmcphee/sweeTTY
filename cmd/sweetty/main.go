@@ -250,7 +250,7 @@ func run(configPath string) {
 	// deaf: under systemd the SystemCallFilter sandbox still applies, and a honeypot
 	// that refuses to start protects nothing.
 	if err := lockdownSyscalls(); err != nil {
-		fmt.Fprintf(os.Stderr, "seccomp lockdown unavailable, continuing without it: %v\n", err)
+		fatal("seccomp lockdown", err)
 	}
 
 	cfg, err := config.Load(configPath)

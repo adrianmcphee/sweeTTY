@@ -6,11 +6,18 @@ package haproxy
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	maxStickSources = 10000
+	maxTableName    = 64
+	maxTableBytes   = 8 << 20
 )
 
 // Source is one stick-table entry: a tracked source address and its current
@@ -29,7 +36,7 @@ type Source struct {
 // The header line, blank lines, and any line without a key are skipped, so a new
 // HAProxy field or a banner never breaks the parse.
 func ParseStickTable(r io.Reader) []Source {
-	var out []Source
+	out := make([]Source, 0, 256)
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -46,6 +53,9 @@ func ParseStickTable(r io.Reader) []Source {
 			ConnCur:  atoi(field(line, "conn_cur=")),
 			ConnRate: connRate(line),
 		})
+		if len(out) >= maxStickSources {
+			break
+		}
 	}
 	return out
 }
@@ -92,6 +102,12 @@ func atoi(s string) int {
 // and returns the parsed sources. The socket runs one command per connection and
 // closes, so reading to EOF yields the whole table.
 func QueryStickTable(socketPath, table string, timeout time.Duration) ([]Source, error) {
+	if !validTableName(table) {
+		return nil, fmt.Errorf("invalid HAProxy table name")
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
 	conn, err := net.DialTimeout("unix", socketPath, timeout)
 	if err != nil {
 		return nil, err
@@ -101,5 +117,17 @@ func QueryStickTable(socketPath, table string, timeout time.Duration) ([]Source,
 	if _, err := conn.Write([]byte("show table " + table + "\n")); err != nil {
 		return nil, err
 	}
-	return ParseStickTable(conn), nil
+	return ParseStickTable(io.LimitReader(conn, maxTableBytes)), nil
+}
+
+func validTableName(table string) bool {
+	if table == "" || len(table) > maxTableName {
+		return false
+	}
+	for _, r := range table {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }

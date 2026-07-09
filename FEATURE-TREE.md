@@ -146,7 +146,7 @@ network, executing attacker input, or writing to the host disk.
 - **Embedded newlines and control bytes cannot forge a second event**. _internal/event: TestLogInjectionIsEscaped_
 - **Each line stamps time and sensor; the file is not world-readable; a write failure is counted, not swallowed**. _internal/event: TestLogStampsTimeAndSensor, TestLogFileIsNotWorldReadable, TestLogWriteFailureIsCountedNotSwallowed_
 - **A stable session id correlates a whole connection**. _internal/proto/telnet: TestSessionIdCorrelatesWholeConnection_
-- **The `hapwatch` helper turns the optional HAProxy edge's stick-table into `FLOOD_BLOCKED` events**: it parses `show table` output and reports each source over the rate threshold once per cooldown, forgetting sources that calm down. _internal/haproxy: TestParseStickTable, TestWatcherReportsAndCoolsDown_
+- **The `hapwatch` helper turns the optional HAProxy edge's bounded stick-table into `FLOOD_BLOCKED` events**: table names are strict, runtime output is byte-limited, source rows are capped, and each source is reported over the rate threshold once per cooldown, forgetting sources that calm down. _internal/haproxy: TestParseStickTable, TestParseStickTableCapsSources, TestTableNameIsStrict, TestWatcherReportsAndCoolsDown_
 - **Control bytes are neutralised for console and portal display**. _internal/util: TestSanitizeDisplay_
 
 ## Geo enrichment

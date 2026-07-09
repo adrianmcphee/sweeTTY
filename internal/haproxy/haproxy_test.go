@@ -30,6 +30,29 @@ func TestParseStickTable(t *testing.T) {
 	}
 }
 
+func TestParseStickTableCapsSources(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < maxStickSources+100; i++ {
+		b.WriteString("0x1: key=192.0.2.1 use=0 exp=1 conn_cur=1 conn_rate(10000)=1\n")
+	}
+	if got := len(ParseStickTable(strings.NewReader(b.String()))); got != maxStickSources {
+		t.Fatalf("parsed %d stick-table sources, want cap %d", got, maxStickSources)
+	}
+}
+
+func TestTableNameIsStrict(t *testing.T) {
+	for _, name := range []string{"st_src", "backend-rate-1"} {
+		if !validTableName(name) {
+			t.Errorf("valid table name %q rejected", name)
+		}
+	}
+	for _, name := range []string{"show table st_src", "../escape", ""} {
+		if validTableName(name) {
+			t.Errorf("unsafe table name %q accepted", name)
+		}
+	}
+}
+
 func TestWatcherReportsAndCoolsDown(t *testing.T) {
 	w := NewWatcher(200, time.Minute)
 	t0 := time.Unix(1_700_000_000, 0)

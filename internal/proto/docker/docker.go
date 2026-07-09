@@ -116,7 +116,7 @@ func (pr *Protocol) respond(s *server.Session, method, target, body string) {
 			"KernelVersion":     pr.persona.KernelRel,
 			"Architecture":      pr.persona.Arch,
 			"NCPU":              2,
-			"MemTotal":          4127576064,
+			"MemTotal":          int64(4127576064),
 			"ServerVersion":     pr.persona.DockerVer,
 			"Name":              pr.persona.Hostname,
 		})
