@@ -22,10 +22,7 @@ on:
         required: false
 
 permissions:
-  contents: write
-  packages: write
-  id-token: write       # mint the OIDC token the provenance attestation is signed with
-  attestations: write   # write the signed attestation back to the repo
+  contents: read
 
 # Serialize releases so two manual runs never race on version computation.
 concurrency:
@@ -35,6 +32,12 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+      id-token: write       # mint the OIDC token the provenance attestation is signed with
+      attestations: write   # write the signed attestation back to the repo
     # Gate publishing behind a protected environment. Add required reviewers to the
     # `release` environment in repo settings to require manual approval per release.
     environment: release
@@ -53,16 +56,31 @@ jobs:
 
       - name: Resolve version
         id: ver
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            v="${{ github.event.inputs.version }}"
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "release workflow must run from main (got ${GITHUB_REF})" >&2
+            exit 1
+          fi
+          if [ -n "${REQUESTED_VERSION}" ]; then
+            if [[ ! "${REQUESTED_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "version must match vMAJOR.MINOR.PATCH" >&2
+              exit 1
+            fi
+            v="${REQUESTED_VERSION}"
           else
             git fetch --tags --force >/dev/null 2>&1 || true
-            latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+            latest=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
             latest=${latest:-v0.0.0}
             ver=${latest#v}
             major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}; patch=${rest##*.}
-            v="v${major}.${minor}.$((patch + 1))"
+            v="v${major}.${minor}.$((10#${patch} + 1))"
+          fi
+          if git rev-parse -q --verify "refs/tags/${v}" >/dev/null; then
+            echo "tag ${v} already exists" >&2
+            exit 1
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Releasing $v"

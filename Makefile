@@ -3,7 +3,6 @@
 
 BINARY := sweetty
 PKG := ./...
-GOFILES := $(shell find . -name '*.go' -not -path './vendor/*')
 
 # Version metadata, injected via -ldflags. VERSION prefers an exact tag and falls
 # back to a describe/short-sha so local builds stay traceable; the release
@@ -25,8 +24,8 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build the version-stamped sweetty binary (PIE for ASLR, as the release does)
-	go build -buildmode=pie -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/sweetty
+build: ## Build the version-stamped sweetty binary (PIE for ASLR; releases are static)
+	go build -buildmode=pie -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/sweetty
 
 run: build ## Build and run (loads ./config.json)
 	./$(BINARY)
@@ -44,10 +43,10 @@ vet: ## Run go vet
 	go vet $(PKG)
 
 fmt: ## Format all Go files in place
-	gofmt -w $(GOFILES)
+	find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -w {} +
 
 fmt-check: ## Fail if any Go file is not gofmt-clean
-	@out=$$(gofmt -l $(GOFILES)); \
+	@out=$$(find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +); \
 		if [ -n "$$out" ]; then echo "unformatted:"; echo "$$out"; exit 1; fi
 
 em-dash-check: ## Fail if any tracked file contains an em dash (banned in code and docs)

@@ -11,6 +11,15 @@ BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 OUT="${OUT:-dist}"
 VER_NOV="${VERSION#v}"
 
+if [[ ! "$VERSION" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+  echo "invalid VERSION: must be a safe v-prefixed release token" >&2
+  exit 2
+fi
+if [[ "$OUT" != "dist" ]]; then
+  echo "OUT must be the repository dist directory" >&2
+  exit 2
+fi
+
 LDFLAGS="-s -w -X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildDate=${BUILD_DATE}"
 
 targets=(
@@ -20,7 +29,7 @@ targets=(
   "darwin/arm64"
 )
 
-rm -rf "$OUT"
+rm -rf -- "$OUT"
 mkdir -p "$OUT"
 
 for t in "${targets[@]}"; do
@@ -40,7 +49,11 @@ for t in "${targets[@]}"; do
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
     go build -trimpath -ldflags "$LDFLAGS" -o "$stage/sweetty" ./cmd/sweetty
   for f in README.md VISION.md LICENSE; do
-    [ -f "$f" ] && cp "$f" "$stage/"
+    if [ -L "$f" ]; then
+      echo "refusing symlink documentation file: $f" >&2
+      exit 2
+    fi
+    [ -f "$f" ] && cp -- "$f" "$stage/"
   done
   tar -C "$stage" -czf "$OUT/sweetty_${VER_NOV}_${goos}_${goarch}.tar.gz" .
   rm -rf "$stage"
@@ -48,7 +61,7 @@ done
 
 # Bare filenames (no ./ prefix), so a consumer can `grep "  <asset>$"` and
 # `sha256sum -c` the entry directly. A ./ prefix breaks that exact-suffix match.
-( cd "$OUT" && { sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz; } > checksums.txt )
+( cd "$OUT" && files=(); for f in ./*.tar.gz; do files+=("${f#./}"); done; { sha256sum -- "${files[@]}" 2>/dev/null || shasum -a 256 "${files[@]}"; } > checksums.txt )
 
 echo "artifacts in ${OUT}:"
 ls -1 "$OUT"

@@ -99,7 +99,7 @@ A listener that fails to bind (port already in use, missing capability) is logge
 
 A few optional fields control the management plane and the network edge:
 
-- `portal_bind` (default `127.0.0.1`): the host the portal binds. Loopback by default, so it is reachable only by tunnelling the management SSH to it. The portal serves plain HTTP with no application auth, so set `0.0.0.0` to expose it directly only behind a trusted boundary (rarely wanted).
+- `portal_bind` (default `127.0.0.1`): the host the portal binds. Loopback is required; a non-loopback value fails closed and does not start the unauthenticated dashboard. Reach it by tunnelling the management SSH.
 - `proxy_protocol` (default `false`): parse an HAProxy PROXY header at the front of each connection and log the attacker's real source IP. Enable it only when the honeypot ports sit behind an HAProxy edge configured with `send-proxy`; the two are a matched pair (see the instance template).
 - `record` (default false): opt in to per-session [asciinema](https://asciinema.org) cast recordings. With recording enabled, `record_dir` (default `recordings`) stores one `<session-id>.cast` per connection; each cast is capped and the directory has file/byte quotas. The portal can replay them inline.
 - `persona_file` (default empty: `persona.json` beside the config): where the generated per-instance identity is persisted. The honeypot writes it on first run (atomically), so when the config directory is operator-owned and read-only (the hardened deployment), point this at a directory the honeypot user owns and can write.
@@ -237,6 +237,15 @@ WorkingDirectory=/opt/sweetty
 ExecStart=/opt/sweetty/sweetty -config /opt/sweetty/config.json
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=~@mount @module @raw-io @reboot @swap
 
 [Install]
 WantedBy=multi-user.target
@@ -246,7 +255,7 @@ Lock down the host so management ports are reachable only from you, and the hone
 
 ```bash
 ufw default deny incoming
-ufw default allow outgoing
+ufw default deny outgoing
 ufw allow from YOUR_IP to any port 9999   # your real SSH (the portal is reached by tunnelling through it, so it needs no rule of its own)
 jq -r '.listeners[].port' /opt/sweetty/config.json | while read -r port; do
   ufw allow "${port}/tcp"                  # generated profile's honeypot surface

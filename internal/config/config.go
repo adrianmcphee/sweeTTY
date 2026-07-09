@@ -23,7 +23,7 @@ type Config struct {
 	LogFile           string         `json:"log_file"`
 	ProxyProtocol     bool           `json:"proxy_protocol,omitempty"`      // parse an HAProxy PROXY header per connection to recover the real source IP (HAProxy edge topology)
 	ProxyTrustedCIDRs []string       `json:"proxy_trusted_cidrs,omitempty"` // peer networks (besides loopback) allowed to present a PROXY header; a header from any other peer is ignored so a direct attacker cannot spoof the source
-	PortalBind        string         `json:"portal_bind,omitempty"`         // host the portal binds; default 127.0.0.1, reached via an SSH tunnel. Set 0.0.0.0 to expose it directly (no application auth, so only behind a trusted boundary)
+	PortalBind        string         `json:"portal_bind,omitempty"`         // host the portal binds; non-loopback values fail closed because the portal has no application auth
 	GeoIPFile         string         `json:"geoip_file,omitempty"`          // optional operator IP-to-country CSV, read only by the portal
 	AsnFile           string         `json:"asn_file,omitempty"`            // optional operator IP-to-ASN CSV (start,end,asn,org), read only by the portal, surfaces the ISP / hosting provider
 	RecordDir         string         `json:"record_dir,omitempty"`          // directory for per-session asciinema cast recordings; empty means disabled unless record is true

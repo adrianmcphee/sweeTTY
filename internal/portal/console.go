@@ -35,7 +35,7 @@ func buildConsoles(cfg config.Config, logger *event.Logger) map[string]*consoleE
 	out := map[string]*consoleEntry{}
 	for _, ac := range cfg.AdminConsoles {
 		name := strings.TrimSpace(ac.Name)
-		if name == "" || strings.ContainsAny(name, "/ ") {
+		if !validConsoleName(name) {
 			logger.System("portal: skipping admin console with invalid name %q", ac.Name)
 			continue
 		}
@@ -56,6 +56,18 @@ func buildConsoles(cfg config.Config, logger *event.Logger) map[string]*consoleE
 		logger.System("portal: admin console %q proxied to %s", name, target.Redacted())
 	}
 	return out
+}
+
+func validConsoleName(name string) bool {
+	if name == "" || len(name) > 32 {
+		return false
+	}
+	for i, r := range name {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') || (i == 0 && (r == '-' || r == '_')) {
+			return false
+		}
+	}
+	return true
 }
 
 // newConsoleProxy builds the reverse proxy for one console. The upstream scheme

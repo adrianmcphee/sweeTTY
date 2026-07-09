@@ -204,6 +204,17 @@ func TestServedHTMLReachesNothingOffHost(t *testing.T) {
 	}
 }
 
+func TestPortalSetsBrowserBoundaryHeaders(t *testing.T) {
+	p := newTestPortal(t)
+	w := httptest.NewRecorder()
+	p.engine().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+	for _, name := range []string{"X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Content-Security-Policy"} {
+		if w.Header().Get(name) == "" {
+			t.Errorf("portal response missing %s", name)
+		}
+	}
+}
+
 // TestDashboardScriptElementIDsResolve catches the classic single-page-app
 // regression: the script reaching for an element id that the markup no longer
 // declares. Every literal id passed to getElementById or setNum must exist.

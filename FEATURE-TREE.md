@@ -72,7 +72,7 @@ file. Design rationale lives in the companion docs ([VISION.md](./VISION.md),
 - **`wget -O- ... | sh` is logged as an exec attempt and not executed**. _internal/proto/telnet: TestPipeToShellIsExecAttempt_
 - **Shell writes touch only the in-memory overlay, which is discarded per session**. _internal/proto/telnet: TestShellWritesNoHostByte, TestOverlayEvaporatesAcrossSessions; internal/vfs: TestCopyOnWriteOverlay_
 - **A full session (login, recon, mutate, faked download) stays inside the boundary**. _internal/proto/telnet: TestVerticalSliceIsCoherentEndToEnd_
-- **Post-RCE containment**: Linux seccomp is installed at startup and the release binary is PIE. Built in `cmd/sweetty/seccomp_linux*.go` and `scripts/build-release.sh`; no runtime test (the filter forbids syscalls the process never issues after setup).
+- **Post-RCE containment**: Linux seccomp is installed at startup and release archives contain static, non-PIE binaries that can run under a `NoExecPaths` systemd sandbox. Built in `cmd/sweetty/seccomp_linux*.go` and `scripts/build-release.sh`; no runtime test (the filter forbids syscalls the process never issues after setup).
 
 ## Faked operations (VISION §2)
 

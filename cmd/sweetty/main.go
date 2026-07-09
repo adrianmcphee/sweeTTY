@@ -325,19 +325,19 @@ func run(configPath string) {
 		// console.
 		lg.System("WARNING: portal_bind=%q is not loopback; the dashboard and console proxy are exposed on the network with no authentication. Bind 127.0.0.1 and reach it over the SSH tunnel.", cfg.PortalBind)
 		fmt.Fprintf(os.Stderr, "WARNING: portal exposed on the network (portal_bind=%q)\n", cfg.PortalBind)
+	} else {
+		pt := portal.New(cfg, lg)
+		pt.SetVersion(version)
+		pt.SetActiveListeners(active)
+		go func() {
+			if err := pt.Start(); err != nil {
+				// The portal is observability, not the core sensor, so a bind failure is
+				// logged loudly but does not take the listeners down.
+				lg.System("portal failed to start: %v", err)
+				fmt.Fprintf(os.Stderr, "portal: %v\n", err)
+			}
+		}()
 	}
-
-	pt := portal.New(cfg, lg)
-	pt.SetVersion(version)
-	pt.SetActiveListeners(active)
-	go func() {
-		if err := pt.Start(); err != nil {
-			// The portal is observability, not the core sensor, so a bind failure is
-			// logged loudly but does not take the listeners down.
-			lg.System("portal failed to start: %v", err)
-			fmt.Fprintf(os.Stderr, "portal: %v\n", err)
-		}
-	}()
 	fmt.Printf("portal listening :%d\n", cfg.PortalPort)
 
 	// Run until a termination signal, then shut down cleanly: stop accepting new

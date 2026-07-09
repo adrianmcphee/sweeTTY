@@ -155,6 +155,17 @@ func TestAdminConsoleRefusesNonLocalTarget(t *testing.T) {
 	}
 }
 
+func TestAdminConsoleRejectsUnsafeNames(t *testing.T) {
+	for _, name := range []string{"../escape", "bad name", "<script>", "_leading"} {
+		if validConsoleName(name) {
+			t.Errorf("console name %q was accepted", name)
+		}
+	}
+	if !validConsoleName("haproxy_stats-1") {
+		t.Fatal("valid console slug was rejected")
+	}
+}
+
 // TestAdminConsoleBareRedirectsToSlash proves a console hit without a trailing
 // slash redirects to one, so the upstream's relative links resolve under the
 // mount instead of escaping it.

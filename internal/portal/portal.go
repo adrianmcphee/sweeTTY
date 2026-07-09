@@ -174,6 +174,7 @@ func (p *Portal) engine() http.Handler {
 // teardown to handle.
 func recoverHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setSecurityHeaders(w)
 		defer func() {
 			if rec := recover(); rec != nil {
 				if rec == http.ErrAbortHandler {
@@ -184,6 +185,13 @@ func recoverHandler(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func setSecurityHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'")
 }
 
 // writeJSON serialises v as the response body with the JSON content type and the
@@ -232,8 +240,8 @@ func (p *Portal) jtSplash(w http.ResponseWriter, _ *http.Request) {
 }
 
 // addr renders the portal bind address. The default bind is loopback, so the
-// portal is reachable only through the SSH tunnel; an empty bind means all
-// interfaces. The port itself is randomized per instance in config.
+// portal is reachable only through the SSH tunnel; an empty bind is rejected by
+// the launcher, and the port is fixed so the operator can forward it predictably.
 func addr(bind string, port int) string {
 	return net.JoinHostPort(bind, itoa(port))
 }
