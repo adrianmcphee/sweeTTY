@@ -29,42 +29,21 @@ type liveSession struct {
 	Recorded   bool   `json:"recorded"`
 }
 
-// recordedSet returns the set of session ids that have a cast on disk, so the live
-// rail and the drawer can tell which sessions can be watched or replayed.
-func (p *Portal) recordedSet() map[string]bool {
-	set := map[string]bool{}
-	if p.cfg.RecordDir == "" {
-		return set
-	}
-	ents, err := os.ReadDir(p.cfg.RecordDir)
-	if err != nil {
-		return set
-	}
-	for _, e := range ents {
-		if id, ok := strings.CutSuffix(e.Name(), ".cast"); ok && safeID(id) {
-			set[id] = true
-			if len(set) >= maxRecordings {
-				break
-			}
-		}
-	}
-	return set
-}
-
 // activeSessions lists connections that have started but not ended and whose last
 // event is recent, newest-activity-first, so the console can surface a live rail and
 // offer to watch them. It reads the incremental projection over the same log as
 // everything else (store.go); nothing new is stored. This is the dashboard's
-// hottest poll, so it must never cost a full log read.
+// hottest poll, so it must never cost a full log read — the recorded flag stats
+// each active session's cast directly (a handful of stats) instead of scanning a
+// recordings directory that can hold tens of thousands of casts, and it does so
+// after the store lock is released.
 func (p *Portal) activeSessions(w http.ResponseWriter, _ *http.Request) {
 	p.store.mu.Lock()
-	defer p.store.mu.Unlock()
 	p.syncStoreLocked()
 
 	now := time.Now().UnixMilli()
 	cutoff := now - activeWindow.Milliseconds()
 	p.store.live.sweep(now - liveSweepFactor*activeWindow.Milliseconds())
-	recorded := p.recordedSet()
 	out := []liveSession{}
 	for _, id := range p.store.live.order {
 		a := p.store.live.byID[id]
@@ -74,7 +53,7 @@ func (p *Portal) activeSessions(w http.ResponseWriter, _ *http.Request) {
 		ls := liveSession{
 			ID: id, IP: a.ip, Protocol: a.proto,
 			StartedMs: a.firstMs, LastSeenMs: a.lastMs,
-			Commands: a.cmds, Recorded: recorded[id],
+			Commands: a.cmds,
 		}
 		if p.geo != nil && a.ip != "" {
 			loc := p.geo.Locate(a.ip)
@@ -82,6 +61,16 @@ func (p *Portal) activeSessions(w http.ResponseWriter, _ *http.Request) {
 			ls.Org = loc.Org
 		}
 		out = append(out, ls)
+	}
+	p.store.mu.Unlock()
+
+	for i := range out {
+		if p.cfg.RecordDir == "" {
+			break
+		}
+		if _, err := os.Stat(filepath.Join(p.cfg.RecordDir, out[i].ID+".cast")); err == nil {
+			out[i].Recorded = true
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].LastSeenMs > out[j].LastSeenMs })
 	writeJSON(w, http.StatusOK, map[string]any{"sessions": out, "count": len(out)})

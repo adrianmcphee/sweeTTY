@@ -25,12 +25,22 @@ func safeID(id string) bool {
 	return true
 }
 
-// recordings lists the session ids that have a cast recording on disk, so the
-// drawer shows a replay control only where one exists.
-func (p *Portal) recordings(w http.ResponseWriter, _ *http.Request) {
+// recordings reports which session ids have a cast recording on disk, so the
+// drawer shows a replay control only where one exists. With ?ids=a,b,c it stats
+// exactly those ids — the recording ring holds tens of thousands of casts, so
+// callers ask about the sessions they are showing rather than listing the world.
+// Without ids it falls back to listing the directory, capped: that form is only
+// a browse aid and must stay bounded.
+func (p *Portal) recordings(w http.ResponseWriter, r *http.Request) {
 	ids := []string{}
 	if p.cfg.RecordDir != "" {
-		if ents, err := os.ReadDir(p.cfg.RecordDir); err == nil {
+		if q := r.URL.Query().Get("ids"); q != "" {
+			asked := strings.Split(q, ",")
+			if len(asked) > maxRecordings {
+				asked = asked[:maxRecordings]
+			}
+			ids = p.recordedOf(asked)
+		} else if ents, err := os.ReadDir(p.cfg.RecordDir); err == nil {
 			for _, e := range ents {
 				if id, ok := strings.CutSuffix(e.Name(), ".cast"); ok && safeID(id) {
 					ids = append(ids, id)
@@ -43,6 +53,24 @@ func (p *Portal) recordings(w http.ResponseWriter, _ *http.Request) {
 	}
 	sort.Strings(ids)
 	writeJSON(w, http.StatusOK, map[string]any{"recordings": ids})
+}
+
+// recordedOf returns the subset of ids whose cast exists on disk, statting each
+// directly. Invalid ids are simply not recorded; they never touch the filesystem.
+func (p *Portal) recordedOf(ids []string) []string {
+	out := []string{}
+	if p.cfg.RecordDir == "" {
+		return out
+	}
+	for _, id := range ids {
+		if !safeID(id) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(p.cfg.RecordDir, id+".cast")); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // cast serves one session's asciinema recording for the inline player. The id is

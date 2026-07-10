@@ -103,13 +103,106 @@ func TestRecorderRejectsUnsafeAndDuplicateIDs(t *testing.T) {
 	}
 }
 
-func TestDirectoryQuotaAccountingIsBounded(t *testing.T) {
-	q := &dirQuota{files: maxCastFiles - 1, bytes: maxCastDirBytes - 4}
-	if !q.reserveFile(4) || q.reserveFile(1) {
-		t.Fatal("directory quota admitted an over-cap file")
+// withLimits shrinks the ring for a test and restores the defaults afterwards.
+func withLimits(t *testing.T, files int, bytes int64) {
+	t.Helper()
+	limits.Lock()
+	prevFiles, prevBytes := limits.files, limits.bytes
+	limits.files, limits.bytes = files, bytes
+	limits.Unlock()
+	t.Cleanup(func() {
+		limits.Lock()
+		limits.files, limits.bytes = prevFiles, prevBytes
+		limits.Unlock()
+	})
+}
+
+// TestRingEvictsOldestWhenFull proves a full recordings directory keeps
+// recording by deleting the oldest finished cast rather than refusing: the ring
+// favours new data over old, and the sensor never goes blind.
+func TestRingEvictsOldestWhenFull(t *testing.T) {
+	withLimits(t, 2, 1<<20)
+	dir := t.TempDir()
+	old := time.Now().Add(-time.Hour)
+	for i, id := range []string{"aaa", "bbb"} {
+		r, err := New(dir, id, 80, 24)
+		if err != nil {
+			t.Fatalf("new %s: %v", id, err)
+		}
+		r.Write([]byte("x"))
+		r.Close()
+		// Distinct mtimes so eviction order is deterministic, oldest first.
+		ts := old.Add(time.Duration(i) * time.Minute)
+		if err := os.Chtimes(filepath.Join(dir, id+".cast"), ts, ts); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if q.reserveBytes(1) {
-		t.Fatal("directory quota admitted bytes beyond its cap")
+	r, err := New(dir, "ccc", 80, 24)
+	if err != nil {
+		t.Fatalf("full ring refused a new cast instead of evicting: %v", err)
+	}
+	r.Close()
+	if _, err := os.Stat(filepath.Join(dir, "aaa.cast")); !os.IsNotExist(err) {
+		t.Error("oldest cast survived eviction")
+	}
+	for _, id := range []string{"bbb", "ccc"} {
+		if _, err := os.Stat(filepath.Join(dir, id+".cast")); err != nil {
+			t.Errorf("cast %s missing after eviction: %v", id, err)
+		}
+	}
+}
+
+// TestRingNeverEvictsActiveCast proves a cast still being written is not an
+// eviction candidate: with the ring fully occupied by live recordings, a new
+// cast is refused rather than destroying one mid-session.
+func TestRingNeverEvictsActiveCast(t *testing.T) {
+	withLimits(t, 1, 1<<20)
+	dir := t.TempDir()
+	open, err := New(dir, "live1", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(dir, "next1", 80, 24); err == nil {
+		t.Fatal("a live cast was evicted to admit a new one")
+	}
+	open.Close()
+	r, err := New(dir, "next1", 80, 24)
+	if err != nil {
+		t.Fatalf("closed cast not evicted: %v", err)
+	}
+	r.Close()
+	if _, err := os.Stat(filepath.Join(dir, "live1.cast")); !os.IsNotExist(err) {
+		t.Error("finished cast survived eviction in a size-1 ring")
+	}
+}
+
+// TestRingEvictsForBytes proves the byte bound also evicts: growth of a current
+// cast pushes the oldest finished cast out instead of capping the recording.
+func TestRingEvictsForBytes(t *testing.T) {
+	withLimits(t, 1000, 4096)
+	dir := t.TempDir()
+	payload := []byte(strings.Repeat("a", 3000)) // printable, so the JSON event stays ~payload-sized
+	r1, err := New(dir, "old1", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r1.Write(payload)
+	r1.Close()
+	ts := time.Now().Add(-time.Hour)
+	os.Chtimes(filepath.Join(dir, "old1.cast"), ts, ts)
+
+	r2, err := New(dir, "new1", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.Write(payload)
+	r2.Close()
+	if _, err := os.Stat(filepath.Join(dir, "old1.cast")); !os.IsNotExist(err) {
+		t.Error("oldest cast not evicted when bytes ran out")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "new1.cast"))
+	if err != nil || !strings.Contains(string(data), `"o"`) {
+		t.Errorf("new cast did not keep recording after byte eviction: %v", err)
 	}
 }
 

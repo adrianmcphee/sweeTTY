@@ -65,6 +65,25 @@ func TestCastServesRecording(t *testing.T) {
 	}
 }
 
+// TestRecordingsTargetedIDs proves ?ids= answers exactly for the asked sessions:
+// existing casts are confirmed, missing ones are not, and unsafe ids never touch
+// the filesystem. The drawer asks about the sessions it shows instead of listing
+// a recording ring that can hold tens of thousands of casts.
+func TestRecordingsTargetedIDs(t *testing.T) {
+	p, _ := newPortalWithRecordDir(t)
+	w := dashGet(t, p, "/dashboard/recordings?ids=sessABC123,nothere,..%2fescape")
+	if w.Code != http.StatusOK {
+		t.Fatalf("recordings?ids: status %d", w.Code)
+	}
+	body := w.Body.String()
+	if !contains(body, "sessABC123") {
+		t.Fatalf("existing cast not confirmed: %q", body)
+	}
+	if contains(body, "nothere") || contains(body, "escape") {
+		t.Fatalf("missing or unsafe id confirmed: %q", body)
+	}
+}
+
 // TestCastRejectsBadID proves an id that is not a bare session identifier (a path
 // traversal attempt, or one with separators) never reaches the filesystem.
 func TestCastRejectsBadID(t *testing.T) {

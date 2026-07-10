@@ -45,3 +45,16 @@ func TestRecordingDefaultsOn(t *testing.T) {
 		t.Errorf("record:false should override an explicit dir, got %q", c.RecordDir)
 	}
 }
+
+// TestRecordingRingKnobs proves the ring-size overrides parse and default to
+// zero, which keeps the binary's built-in limits.
+func TestRecordingRingKnobs(t *testing.T) {
+	base := `"log_file":"x.log","listeners":[{"port":2323,"protocol":"telnet"}]`
+	c, err := Load(writeCfg(t, `{`+base+`,"record_max_files":100000,"record_max_bytes":8589934592}`))
+	if err != nil || c.RecordMaxFiles != 100000 || c.RecordMaxBytes != 8589934592 {
+		t.Errorf("ring knobs = %d files / %d bytes err=%v, want 100000 / 8589934592", c.RecordMaxFiles, c.RecordMaxBytes, err)
+	}
+	if c, _ := Load(writeCfg(t, "{"+base+"}")); c.RecordMaxFiles != 0 || c.RecordMaxBytes != 0 {
+		t.Errorf("absent ring knobs = %d / %d, want 0 / 0 (built-in defaults)", c.RecordMaxFiles, c.RecordMaxBytes)
+	}
+}

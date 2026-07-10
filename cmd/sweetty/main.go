@@ -29,6 +29,7 @@ import (
 	"sweetty/internal/proto/redis"
 	"sweetty/internal/proto/ssh"
 	"sweetty/internal/proto/telnet"
+	"sweetty/internal/record"
 	"sweetty/internal/server"
 	"sweetty/internal/vfs"
 )
@@ -280,6 +281,10 @@ func run(configPath string) {
 		fatal("fakehost", err)
 	}
 	fmt.Printf("persona: %s %s (%s)\n", p.Hostname, p.HostIP, p.PrettyName)
+
+	if cfg.RecordDir != "" {
+		record.SetLimits(cfg.RecordMaxFiles, cfg.RecordMaxBytes)
+	}
 
 	var servers []*server.Server
 	// active records which configured ports actually bound, so the console can flag a

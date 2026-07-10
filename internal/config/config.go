@@ -28,6 +28,8 @@ type Config struct {
 	AsnFile           string         `json:"asn_file,omitempty"`            // optional operator IP-to-ASN CSV (start,end,asn,org), read only by the portal, surfaces the ISP / hosting provider
 	RecordDir         string         `json:"record_dir,omitempty"`          // directory for per-session asciinema cast recordings; empty means the default "recordings" (relative to the working directory) unless record is false
 	Record            *bool          `json:"record,omitempty"`              // session recording toggle; on by default (casts are quota-bound), set false to disable
+	RecordMaxFiles    int            `json:"record_max_files,omitempty"`    // recording ring size in casts; past it the oldest casts are evicted. 0 means the built-in default (65536)
+	RecordMaxBytes    int64          `json:"record_max_bytes,omitempty"`    // recording ring size in bytes; past it the oldest casts are evicted. 0 means the built-in default (4 GiB)
 	PersonaFile       string         `json:"persona_file,omitempty"`        // where the generated per-instance identity is persisted; empty means persona.json beside the config. Point it at a honeypot-writable path when the config dir is read-only (the hardened deployment), since the persona is written by the honeypot, not the operator
 	BruteForce        BruteForce     `json:"bruteforce,omitzero"`           // optional "let a persistent guesser in" policy; off by default
 	AdminConsoles     []AdminConsole `json:"admin_consoles,omitempty"`      // operator consoles reverse-proxied through the portal, reached over the same SSH tunnel

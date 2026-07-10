@@ -504,7 +504,6 @@ bumpUnseen();
 if(curView==='sources'||curView==='recon'||NOTABLE[e.event])scheduleOverview();
 if(curView==='honeytokens'&&e.event==='HONEYTOKEN')loadHoneytokens();
 if(curView==='payloads'&&e.event==='DOWNLOAD_ATTEMPT')loadPayloads();
-if(e.event==='SESSION_END')loadRecordings();
 // Update the live rail the instant an event streams, from the event's own data, so
 // a new session pops in immediately rather than waiting on the poll; scheduleActive
 // then reconciles with the backend (country, ISP, verdict, recorded flag).
@@ -939,16 +938,20 @@ if(e.event==='DOWNLOAD_ATTEMPT')dls.push(e);
 var sids=Object.keys(sessions);
 sect('Sessions ('+sids.length+')');
 if(!sids.length)detailBody.appendChild(el('div','item muted','none'));
+var srows={},unknown=[];
 for(var a=0;a<sids.length;a++){
 var it=el('div','item');
 it.appendChild(el('span',null,sids[a]+'  ('+sessions[sids[a]]+' events)'));
-if(recordings[sids[a]]){
-var rp=el('span','replaylink','replay');
-(function(id){rp.addEventListener('click',function(){playCast(id);});})(sids[a]);
-it.appendChild(rp);
-}
+srows[sids[a]]=it;
+if(recordings[sids[a]])addReplayLink(it,sids[a]);
+else unknown.push(sids[a]);
 detailBody.appendChild(it);
 }
+// Replay controls for casts not yet known appear as soon as the targeted check
+// answers; rows from a superseded render are detached, so late answers are inert.
+checkRecordings(unknown,function(){
+for(var u=0;u<unknown.length;u++)if(recordings[unknown[u]])addReplayLink(srows[unknown[u]],unknown[u]);
+});
 sect('Credentials ('+creds.length+')');
 if(!creds.length)detailBody.appendChild(el('div','item muted','none'));
 for(var b=0;b<creds.length;b++){
@@ -976,12 +979,23 @@ if(!preserve)detailBody.scrollTop=0;
 detailEl.classList.add('open');backdrop.classList.add('open');
 }
 
+// recordings caches which session ids have a cast on disk. It is filled by
+// targeted ?ids= checks for the sessions actually on screen: the recording ring
+// can hold tens of thousands of casts, so the full listing is never fetched.
 var recordings={};
-function loadRecordings(){
-fetch('/dashboard/recordings',{credentials:'same-origin'})
+function checkRecordings(ids,cb){
+if(!ids.length){cb();return;}
+fetch('/dashboard/recordings?ids='+ids.join(','),{credentials:'same-origin'})
 .then(function(r){return r.json();})
-.then(function(d){recordings={};var ids=d.recordings||[];for(var i=0;i<ids.length;i++)recordings[ids[i]]=true;})
-.catch(function(){});
+.then(function(d){var got=d.recordings||[];for(var i=0;i<got.length;i++)recordings[got[i]]=true;cb();})
+.catch(function(){cb();});
+}
+function addReplayLink(it,id){
+if(it.__rp)return;
+it.__rp=1;
+var rp=el('span','replaylink','replay');
+rp.addEventListener('click',function(){playCast(id);});
+it.appendChild(rp);
 }
 
 var replayEl=document.getElementById('replay');
@@ -1452,7 +1466,7 @@ renderSpark();setInterval(sparkTick,2500);
 try{if(localStorage.getItem('sweetty_snd')==='1')setSound(true);}catch(x){}
 document.addEventListener('pointerdown',gestureResume);
 setTimeout(function(){hydrated=true;},1500);
-load();connect();loadConsoles();loadRecordings();loadOverview();loadActive();
+load();connect();loadConsoles();loadOverview();loadActive();
 // Refresh the recon rollup (and the port-scan stat card it feeds) on a slow,
 // bounded timer so it stays current without re-reading the whole log per event.
 setInterval(loadOverview,30000);

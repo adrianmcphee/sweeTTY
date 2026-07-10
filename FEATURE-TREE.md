@@ -156,7 +156,7 @@ network, executing attacker input, or writing to the host disk.
 
 ## Session recording and replay
 
-- **Session recording is on by default (`record: false` disables it) and each cast plus the recording directory has storage quotas; ids cannot escape the recording directory and a nil recorder is a no-op**. _internal/config: TestRecordingDefaultsOn; internal/record: TestCastIsValidAsciinema, TestNilRecorderIsSafe, TestRecorderRejectsUnsafeAndDuplicateIDs, TestDirectoryQuotaAccountingIsBounded; internal/server: TestSessionRecordingWritesCast_
+- **Session recording is on by default (`record: false` disables it); each cast is size-capped and the recording directory is a bounded ring (`record_max_files`/`record_max_bytes`) that evicts the oldest finished casts instead of ever refusing to record — a cast still being written is never evicted. Ids cannot escape the recording directory and a nil recorder is a no-op**. _internal/config: TestRecordingDefaultsOn, TestRecordingRingKnobs; internal/record: TestCastIsValidAsciinema, TestNilRecorderIsSafe, TestRecorderRejectsUnsafeAndDuplicateIDs, TestRingEvictsOldestWhenFull, TestRingNeverEvictsActiveCast, TestRingEvictsForBytes; internal/server: TestSessionRecordingWritesCast_
 - **A recorded cast is served by id; a bad id is rejected**. _internal/portal: TestCastServesRecording, TestCastRejectsBadID_
 
 ## Portal (VISION §6)
