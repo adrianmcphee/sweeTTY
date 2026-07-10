@@ -15,7 +15,7 @@ flowchart LR
     SHELL --> PER["Persona<br/>internal/persona"]
     VFS --> PER
     SES --> LOG[("JSON event log")]
-    SES -. "record: true" .-> CAST[("Quota-bound per-session<br/>asciinema cast")]
+    SES -. "on by default" .-> CAST[("Quota-bound per-session<br/>asciinema cast")]
     LOG --> PORTAL["Portal dashboard<br/>internal/portal<br/>binds loopback"]
     CAST --> PORTAL
     OP([Operator]) -->|SSH tunnel| PORTAL

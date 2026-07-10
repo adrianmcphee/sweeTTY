@@ -2,8 +2,9 @@
 // file, so an operator can replay exactly what an attacker saw. It records only
 // output the honeypot itself produced, to an operator-configured directory; it
 // is the same category of telemetry as the JSON event log, written to a path the
-// operator chose, never to an attacker-controlled path. Recording is opt-in and
-// is disabled unless the configuration explicitly enables it.
+// operator chose, never to an attacker-controlled path. Recording runs whenever
+// a directory is configured; the config layer defaults one in, and "record":
+// false removes it.
 package record
 
 import (
