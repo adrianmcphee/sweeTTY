@@ -33,7 +33,7 @@ type liveSession struct {
 // event is recent, newest-activity-first, so the console can surface a live rail and
 // offer to watch them. It reads the incremental projection over the same log as
 // everything else (store.go); nothing new is stored. This is the dashboard's
-// hottest poll, so it must never cost a full log read — the recorded flag stats
+// hottest poll, so it must never cost a full log read: the recorded flag stats
 // each active session's cast directly (a handful of stats) instead of scanning a
 // recordings directory that can hold tens of thousands of casts, and it does so
 // after the store lock is released.

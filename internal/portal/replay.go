@@ -27,7 +27,7 @@ func safeID(id string) bool {
 
 // recordings reports which session ids have a cast recording on disk, so the
 // drawer shows a replay control only where one exists. With ?ids=a,b,c it stats
-// exactly those ids — the recording ring holds tens of thousands of casts, so
+// exactly those ids: the recording ring holds tens of thousands of casts, so
 // callers ask about the sessions they are showing rather than listing the world.
 // Without ids it falls back to listing the directory, capped: that form is only
 // a browse aid and must stay bounded.
